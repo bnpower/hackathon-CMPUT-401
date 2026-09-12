@@ -121,6 +121,60 @@ All endpoints below are under `/api/` and (aside from register/token) require
 | `/api/resumes/` | CRUD master + tailored resumes |
 | `/api/communications/` | CRUD logged communications (emails, calls, interviews, offers, rejections) per application |
 
+## Deploying to Cybera RAC
+
+Pushing to `main` deploys automatically via `.github/workflows/deploy.yml`: GitHub Actions
+SSHes into the server, pulls the latest code, and runs `docker compose -f docker-compose.prod.yml
+up -d --build` (Gunicorn + Whitenoise for the backend, an nginx-served static build for the
+frontend). You can also trigger it manually from the Actions tab (`workflow_dispatch`).
+
+### 1. Provision the Cybera RAC instance
+
+In the [Cybera RAC dashboard](https://rac.cybera.ca/) (OpenStack Horizon):
+
+- **Image:** Ubuntu 22.04 LTS
+- **Flavor:** at least 2 vCPUs / 4 GB RAM (Postgres + Django + a Node build all run on one box)
+- **Network:** assign a **floating IP** so the box is reachable from the internet
+- **Security group:** allow inbound TCP `22` (SSH — restrict the source range if you can),
+  `80` (frontend), and `8000` (backend API)
+- **Key pair:** create/import one in RAC so you can SSH in
+
+### 2. Bootstrap the box (one-time, run on the server)
+
+```bash
+ssh ubuntu@<floating-ip>
+curl -fsSL https://raw.githubusercontent.com/bnpower/hackathon-CMPUT-401/main/deploy/bootstrap-server.sh | bash
+```
+
+This installs Docker, clones the repo into `/opt/hackathon-cmput-401`, and creates a starter
+`.env` from `.env.prod.example`. Edit that `.env` with real values (`DJANGO_SECRET_KEY`,
+`DB_PASSWORD`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `VITE_API_URL` — see
+`.env.prod.example` for the shape), then do one manual deploy to confirm it works:
+
+```bash
+cd /opt/hackathon-cmput-401
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 3. GitHub Actions secrets
+
+Add these under the repo's **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `RAC_HOST` | The instance's floating IP (or DNS name) |
+| `RAC_USERNAME` | SSH user (`ubuntu` on the standard Ubuntu image) |
+| `RAC_SSH_KEY` | Private key matching the key pair you assigned to the instance (paste the whole PEM) |
+| `RAC_SSH_PORT` | Optional, only if SSH isn't on port 22 |
+
+Application secrets (`DJANGO_SECRET_KEY`, `DB_PASSWORD`, etc.) live only in the server's
+`.env` file, not in GitHub — the workflow never touches them directly, it just runs
+`docker compose`, which reads `.env` on the box.
+
+After that, every push to `main` redeploys automatically. This assumes the GitHub repo is
+public so `git fetch` on the server needs no credentials; if you make it private, either add
+a deploy key on the server or switch the bootstrap clone/fetch to use a PAT.
+
 ## Troubleshooting
 
 - **Port already in use:** something else is bound to 5173/8000/5432 — stop it or change the

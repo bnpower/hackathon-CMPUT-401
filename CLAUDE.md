@@ -23,6 +23,10 @@ Backend and frontend scaffolds are in place; features beyond the initial CRUD/au
 - `frontend/` — React app scaffolded with Vite (JS, not TS). `src/api/client.js` is an axios
   instance that attaches the JWT from `localStorage` and reads `VITE_API_URL`.
 - `docker-compose.yml` — `db` (Postgres), `backend`, `frontend` services for local dev.
+- `docker-compose.prod.yml` / `frontend/Dockerfile.prod` — production build: Gunicorn +
+  Whitenoise for the backend, an nginx-served static build for the frontend. Deployed to
+  Cybera RAC by `.github/workflows/deploy.yml` on push to `main` (see README's
+  "Deploying to Cybera RAC" section for required secrets and server setup).
 
 ## Commands
 
