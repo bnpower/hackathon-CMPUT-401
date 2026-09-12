@@ -14,44 +14,34 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # Runs on a self-hosted runner installed directly on the Cybera RAC instance.
+    # GitHub-hosted runners have no IPv6 egress and this instance has no public
+    # IPv4 (floating IPs aren't available for this project), so there's no way
+    # for a hosted runner to reach it over SSH. A self-hosted runner sidesteps
+    # that entirely: it polls GitHub over an outbound connection (the same
+    # direction as `git clone`/`docker pull`, which already work fine here), so
+    # nothing needs to connect inbound to the box at all - the job just runs
+    # locally on it.
+    runs-on: [self-hosted, rac]
     steps:
-      # appleboy/ssh-action (drone-ssh) mishandles bracketed IPv6 hosts (truncates
-      # the address before dialing), so we just use the runner's native OpenSSH
-      # client instead - the same tool that already connects fine manually.
-      - name: Check IPv6 egress
-        run: curl -6 -sS -m 10 -o /dev/null -w "runner has IPv6 egress (%{http_code})\n" https://ifconfig.co || echo "::warning::This runner may not have IPv6 egress - SSH to an IPv6-only host will likely time out below."
-
-      - name: Set up SSH key
+      - name: Pull latest and deploy
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.RAC_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-      - name: Deploy over SSH
-        run: |
-          ssh -6 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              -o ConnectTimeout=15 -i ~/.ssh/deploy_key \
-              "${{ secrets.RAC_USERNAME }}@${{ secrets.RAC_HOST }}" '
-            set -euo pipefail
-            cd '"${{ env.APP_DIR }}"'
-            git fetch origin '"${{ github.ref_name }}"'
-            git reset --hard origin/'"${{ github.ref_name }}"'
-            docker compose -f docker-compose.prod.yml up -d --build
-            docker image prune -f
-          '
+          set -euo pipefail
+          cd "${{ env.APP_DIR }}"
+          git fetch origin ${{ github.ref_name }}
+          git reset --hard origin/${{ github.ref_name }}
+          docker compose -f docker-compose.prod.yml up -d --build
+          docker image prune -f
 
       - name: Wait for services to come up
         run: sleep 10
 
-      # RAC_HOST is an IPv6 literal (Cybera RAC instances get IPv6 by default,
-      # no floating IPv4) so URLs need bracket notation.
       - name: Health check - frontend
-        run: curl -6 -sf -o /dev/null "http://[${{ secrets.RAC_HOST }}]/"
+        run: curl -sf -o /dev/null "http://localhost/"
 
       - name: Health check - backend
         run: |
-          status=$(curl -6 -s -o /dev/null -w "%{http_code}" "http://[${{ secrets.RAC_HOST }}]:8000/api/auth/me/")
+          status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/auth/me/")
           if [ "$status" != "401" ]; then
             echo "Expected 401 (auth required) from backend, got $status"
             exit 1
