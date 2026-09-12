@@ -1056,3 +1056,268 @@ body {
     transform: none;
   }
 }
+/* Pencil borders, scraps, and a few small doodles. */
+body {
+  background-image:
+    radial-gradient(ellipse at 30% 40%, #8f234927 0.65px, transparent 1px),
+    radial-gradient(ellipse at 70% 30%, #761b321a 0.8px, transparent 1.2px),
+    repeating-linear-gradient(1deg, transparent 0 17px, #9f476008 17px 18px);
+  background-size:
+    13px 17px,
+    23px 29px,
+    100% 18px;
+}
+.sidebar {
+  border-right: 3px double #951a3c;
+}
+.topbar {
+  border-bottom: 3px double #992345;
+}
+.page-heading h1 {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 10px;
+  text-shadow: none;
+}
+
+
+.nav-item {
+  border-radius: 2px;
+}
+.nav-item.active {
+  border-width: 2px 1px 3px 2px;
+  box-shadow: 3px 2px #751832;
+}
+.primary,
+.secondary,
+.job-open {
+  border-radius: 2px;
+  border-width: 2px 1px 3px 2px;
+}
+.primary,
+.secondary {
+  box-shadow: 3px 2px 0 #c87a93;
+}
+.desktop-meme {
+  border-width: 3px 2px 4px 2px;
+  border-radius: 2px;
+}
+.recruiter-meme,
+.sidebar-meme,
+.tab-meme {
+  border-width: 1px 2px 3px 1px;
+  border-radius: 2px;
+}
+.recruiter-meme::before,
+.sidebar-meme::before {
+  clip-path: polygon(
+    3% 0,
+    97% 5%,
+    100% 35%,
+    96% 54%,
+    100% 79%,
+    96% 100%,
+    1% 95%,
+    4% 70%,
+    0 45%
+  );
+}
+.meme-board {
+  border-top: 2px dotted #b45570;
+  border-bottom: 3px double #a62b4c;
+}
+.stats {
+  border-width: 2px 1px 3px 2px;
+  border-radius: 2px;
+  transform: rotate(-0.45deg);
+  box-shadow: 3px 3px 0 #b356753b;
+}
+.search,
+.filter {
+  border-width: 2px 1px 1px 2px;
+  border-radius: 2px;
+}
+.job-card {
+  position: relative;
+  border-width: 2px 1px 3px 2px;
+  border-style: solid;
+  border-radius: 2px;
+  box-shadow: 4px 3px 0 #a4517252;
+}
+.job-card:nth-child(3n + 2) {
+  transform: rotate(0.9deg);
+  border-style: solid dashed solid solid;
+}
+.job-card:nth-child(3n) {
+  transform: rotate(-0.8deg);
+}
+.job-card h3 {
+  font-style: normal;
+}
+.job-sticker {
+  border-bottom: 2px dotted #b3637b;
+}
+.company-logo {
+  transform: rotate(-4deg);
+  border: 1px solid #9b4360;
+  box-shadow: 1px 2px 0 #c8799759;
+}
+.card-bottom {
+  border-top: 2px dotted #b6798b;
+}
+.board-column {
+  border: 2px dashed #a24d68;
+  border-radius: 2px;
+}
+.board-column h2 { text-decoration: none; }
+.application-card,
+.resume-editor,
+.resume-list,
+.resume-uploads,
+.message-card {
+  border-width: 2px 1px 3px 2px;
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 #b5678438;
+}
+.resume-list {
+  border-style: dashed;
+}
+.resume-uploads {
+  border-top: 3px double #a5526d;
+}
+.resume-editor textarea {
+  background: repeating-linear-gradient(#fff9fa 0 24px, #edced8 24px 25px);
+  line-height: 25px;
+  border-radius: 1px;
+}
+.info-strip,
+.notice {
+  border-width: 1px 2px 2px 1px;
+  border-radius: 2px;
+}
+.modal {
+  border-width: 3px 2px 4px 2px;
+  border-radius: 2px;
+  box-shadow: 7px 5px 0 #641d3c70;
+}
+.offer-doodle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-top: 24px;
+  font-family: "Comic Sans MS", cursive;
+  font-size: 25px;
+  color: #b72957;
+}
+.offer-doodle img {
+  width: min(120px, 70%);
+  height: auto;
+  mix-blend-mode: multiply;
+  transform: rotate(-5deg);
+}
+
+/* Floats previously changed line widths inside the Inbox panel. */
+.inbox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 24px;
+  align-items: start;
+}
+.inbox::after {
+  display: none;
+}
+.inbox .inbox-meme {
+  float: none;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 100%;
+  margin: 0;
+}
+.inbox > .info-strip {
+  grid-column: 1;
+  margin: 0;
+}
+.inbox > .message-card {
+  grid-column: 1;
+  margin: 0;
+}
+.inbox > .empty {
+  grid-column: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 300px;
+  padding: 42px 25px 62px;
+  isolation: isolate;
+  border: 2px dashed #b64a6a;
+  border-radius: 2px;
+  box-shadow: 4px 3px 0 #c778942e;
+}
+.inbox > .empty > .primary {
+  align-self: center;
+  margin-inline: auto;
+  flex-shrink: 0;
+}
+.inbox > .empty > p {
+  max-width: 100%;
+}
+.inbox > .empty > .inbox-corner-doodle {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  width: 65px;
+  height: 65px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  transform: rotate(8deg);
+  pointer-events: none;
+  z-index: -1;
+}
+footer {
+  border-top: 2px dotted #b8768d;
+}
+@media (max-width: 1150px) {
+  .inbox {
+    grid-template-columns: minmax(0, 1fr) 155px;
+    gap: 18px;
+  }
+}
+@media (max-width: 800px) {
+  .inbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inbox .inbox-meme {
+    grid-column: 1;
+    grid-row: auto;
+    width: 155px;
+    justify-self: center;
+  }
+  .inbox > .empty {
+    grid-column: 1;
+  }
+  
+}
+@media (max-width: 540px) {
+  .sidebar {
+    border-right: 0;
+    border-top: 3px double #951a3c;
+  }
+  .job-card:nth-child(n),
+  .stats {
+    transform: none;
+  }
+  .inbox > .empty {
+    padding: 38px 16px 58px;
+  }
+  .page-heading h1 {
+    font-size: 36px;
+  }
+  
+  .offer-doodle img {
+    width: 100px;
+  }
+}

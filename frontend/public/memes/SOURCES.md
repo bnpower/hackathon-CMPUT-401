@@ -1,5 +1,7 @@
 # Demo image sources
 
+- `hamster-doodle.png`: reference-style hamster drawing from https://tenor.com/view/stupid-dumb-hamster-cute-fat-gif-13786559807755061152 — original download https://media.tenor.com/v1OzGc_rB6AAAAAe/stupid-dumb.png. The downloaded image retains its embedded creator credit.
+
 Reference-style reaction images are stored locally, so the UI does not depend on external image hosts. These are third-party meme images, not original Hire Power artwork or assets with a verified commercial license.
 
 - `nerd-cat.jpg`: https://imgflip.com/memetemplate/576460460/ermmactually — original download https://i.imgflip.com/9j7jqk.jpg

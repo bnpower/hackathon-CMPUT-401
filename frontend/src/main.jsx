@@ -317,6 +317,7 @@ function App() {
           ].map(([Icon, name]) => (
             <button
               key={name}
+              aria-label={name}
               className={`nav-item ${tab === name ? "active" : ""}`}
               aria-current={tab === name ? "page" : undefined}
               onClick={() => navigate(name)}
@@ -368,7 +369,9 @@ function App() {
         <main id="main">
           <div className="page-heading">
             <div>
-              <h1>{tab === "Jobs" ? "Here, some dang jobs" : tab}</h1>
+              <h1>
+                {tab === "Jobs" ? "Here, jobs" : tab}
+              </h1>
             </div>
             {tab !== "Jobs" && (
               <button
@@ -744,6 +747,16 @@ function App() {
                     {!applications.some((a) => a.status === stage) && (
                       <p className="column-empty">No applications here yet.</p>
                     )}
+                    {stage === "Offer" && (
+                      <div className="offer-doodle" aria-hidden="true">
+                        <img
+                          src="/memes/hamster-doodle.png"
+                          alt=""
+                          width="140"
+                          height="140"
+                        />
+                      </div>
+                    )}
                     {stage === "Applied" && (
                       <figure className="tab-meme application-meme">
                         <img
@@ -878,6 +891,14 @@ function App() {
                     <Plus size={16} />
                     Log your first response
                   </button>
+                  <img
+                    className="inbox-corner-doodle"
+                    src="/memes/hamster-doodle.png"
+                    alt=""
+                    aria-hidden="true"
+                    width="95"
+                    height="95"
+                  />
                 </div>
               )}
             </section>
