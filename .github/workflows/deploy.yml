@@ -2,7 +2,7 @@ name: Deploy to Cybera RAC
 
 on:
   push:
-    branches: [main]
+    branches: [main, brady]
   workflow_dispatch: {}
 
 concurrency:
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APP_DIR: /opt/hackathon-cmput-401
+  APP_DIR: /home/ubuntu/app
 
 jobs:
   deploy:
@@ -26,20 +26,23 @@ jobs:
           script: |
             set -euo pipefail
             cd "${{ env.APP_DIR }}"
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
             docker compose -f docker-compose.prod.yml up -d --build
             docker image prune -f
 
       - name: Wait for services to come up
         run: sleep 10
 
+      # RAC_HOST is an IPv6 literal (Cybera RAC instances get IPv6 by default,
+      # no floating IPv4) so URLs need bracket notation; ssh's `host` field above
+      # takes the bare address.
       - name: Health check - frontend
-        run: curl -sf -o /dev/null "http://${{ secrets.RAC_HOST }}/"
+        run: curl -sf -o /dev/null "http://[${{ secrets.RAC_HOST }}]/"
 
       - name: Health check - backend
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" "http://${{ secrets.RAC_HOST }}:8000/api/auth/me/")
+          status=$(curl -s -o /dev/null -w "%{http_code}" "http://[${{ secrets.RAC_HOST }}]:8000/api/auth/me/")
           if [ "$status" != "401" ]; then
             echo "Expected 401 (auth required) from backend, got $status"
             exit 1

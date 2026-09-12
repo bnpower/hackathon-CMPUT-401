@@ -9,7 +9,8 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/bnpower/hackathon-CMPUT-401.git}"
-APP_DIR="${APP_DIR:-/opt/hackathon-cmput-401}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
+APP_DIR="${APP_DIR:-$HOME/app}"
 
 echo "==> Installing Docker Engine + Compose plugin"
 if ! command -v docker >/dev/null 2>&1; then
@@ -17,11 +18,9 @@ if ! command -v docker >/dev/null 2>&1; then
   sudo usermod -aG docker "$USER"
 fi
 
-echo "==> Cloning repo to $APP_DIR"
-sudo mkdir -p "$APP_DIR"
-sudo chown "$USER":"$USER" "$APP_DIR"
+echo "==> Cloning repo ($REPO_BRANCH) to $APP_DIR"
 if [ ! -d "$APP_DIR/.git" ]; then
-  git clone "$REPO_URL" "$APP_DIR"
+  git clone --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
 fi
 
 cd "$APP_DIR"
