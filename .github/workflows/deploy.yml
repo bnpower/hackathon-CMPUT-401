@@ -19,7 +19,9 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.RAC_HOST }}
+          # bracket notation: the ssh-action's host:port join doesn't handle a bare
+          # IPv6 literal correctly on its own (see RAC_HOST being an IPv6 address).
+          host: "[${{ secrets.RAC_HOST }}]"
           username: ${{ secrets.RAC_USERNAME }}
           key: ${{ secrets.RAC_SSH_KEY }}
           port: ${{ secrets.RAC_SSH_PORT || 22 }}
