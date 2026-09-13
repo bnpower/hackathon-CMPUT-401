@@ -875,6 +875,40 @@ footer {
   min-width: 0;
   width: 100%;
 }
+.application-card-handle {
+  cursor: grab;
+  touch-action: none;
+  margin: -2px -2px 0;
+  padding: 2px;
+  border-radius: 6px;
+}
+.application-card-handle:hover {
+  background: #fbf0f3;
+}
+.application-card-handle:active {
+  cursor: grabbing;
+}
+.application-card-handle:focus-visible {
+  outline: 3px solid #883853;
+  outline-offset: 3px;
+}
+.application-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.drag-icon {
+  color: #c98ea0;
+  flex-shrink: 0;
+}
+.board-column.is-drop-target {
+  outline: 2px dashed #a11636;
+  outline-offset: -4px;
+}
+.drag-overlay-card {
+  cursor: grabbing;
+  box-shadow: 0 10px 24px rgba(65, 27, 40, 0.25);
+}
 .column-empty {
   font-size: 11px;
   text-align: center;

@@ -21,7 +21,25 @@ import {
   SlidersHorizontal,
   ChevronsLeft,
   ChevronsRight,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  closestCorners,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import "./styles.css";
 import "./personality.css";
 import ResumeUploads from "./ResumeUploads";
@@ -249,6 +267,36 @@ function App() {
     ]),
     [messages, setMessages, messageError] = useSaved("sprout-messages", []);
   const [resumeId, setResumeId] = useState(1);
+  const [activeDragId, setActiveDragId] = useState(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const draggedApplication = applications.find((a) => a.id === activeDragId);
+  function handleDragEnd(event) {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeApp = applications.find((a) => a.id === active.id);
+    if (!activeApp) return;
+    const overApp = applications.find((a) => a.id === over.id);
+    const targetStatus = overApp
+      ? overApp.status
+      : String(over.id).startsWith("col-")
+        ? String(over.id).slice(4)
+        : null;
+    if (!targetStatus) return;
+    const withoutActive = applications.filter((a) => a.id !== active.id);
+    const moved = { ...activeApp, status: targetStatus };
+    if (overApp) {
+      const overIndex = withoutActive.findIndex((a) => a.id === over.id);
+      const next = [...withoutActive];
+      next.splice(overIndex, 0, moved);
+      setApplications(next);
+    } else {
+      setApplications([...withoutActive, moved]);
+    }
+  }
   const filtered = jobs.filter(
     (j) =>
       `${j.title} ${j.company} ${j.tags.join(" ")}`
@@ -693,87 +741,57 @@ function App() {
                   View reminders <ArrowRight size={15} />
                 </button>
               </div>
-              <div className="board">
-                {stages.map((stage) => (
-                  <section className="board-column" key={stage}>
-                    <h2>
-                      <span className={`stage-dot ${stage}`} />
-                      {stage}
-                      <span className="count">
-                        {applications.filter((a) => a.status === stage).length}
-                      </span>
-                    </h2>
-                    {applications
-                      .filter((a) => a.status === stage)
-                      .map((a) => (
-                        <article className="application-card" key={a.id}>
-                          <small>{a.company}</small>
-                          <h3>{a.position}</h3>
-                          <p>Applied {a.date}</p>
-                          <label>
-                            Stage
-                            <select
-                              value={a.status}
-                              onChange={(e) =>
-                                setApplications(
-                                  applications.map((item) =>
-                                    item.id === a.id
-                                      ? { ...item, status: e.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            >
-                              {stages.map((s) => (
-                                <option key={s}>{s}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Follow-up date
-                            <input
-                              type="date"
-                              value={a.followUp}
-                              onChange={(e) =>
-                                setApplications(
-                                  applications.map((item) =>
-                                    item.id === a.id
-                                      ? { ...item, followUp: e.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                            />
-                          </label>
-                        </article>
-                      ))}
-                    {!applications.some((a) => a.status === stage) && (
-                      <p className="column-empty">No applications here yet.</p>
-                    )}
-                    {stage === "Offer" && (
-                      <div className="offer-doodle" aria-hidden="true">
-                        <img
-                          src="/memes/hamster-doodle.png"
-                          alt=""
-                          width="140"
-                          height="140"
-                        />
-                      </div>
-                    )}
-                    {stage === "Applied" && (
-                      <figure className="tab-meme application-meme">
-                        <img
-                          src="/memes/praying.jpg"
-                          alt="Black-and-white reaction image of two men praying"
-                          width="735"
-                          height="577"
-                        />
-                        <figcaption>after clicking submit</figcaption>
-                      </figure>
-                    )}
-                  </section>
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={(e) => {
+                  console.log("DEBUG dragstart", e.active.id);
+                  setActiveDragId(e.active.id);
+                }}
+                onDragOver={(e) =>
+                  console.log("DEBUG dragover", e.active.id, "over:", e.over?.id)
+                }
+                onDragEnd={(e) => {
+                  console.log("DEBUG dragend", e.active.id, "over:", e.over?.id);
+                  handleDragEnd(e);
+                }}
+                onDragCancel={() => {
+                  console.log("DEBUG dragcancel");
+                  setActiveDragId(null);
+                }}
+              >
+                <div className="board">
+                  {stages.map((stage) => (
+                    <BoardColumn
+                      key={stage}
+                      stage={stage}
+                      apps={applications.filter((a) => a.status === stage)}
+                      onStatusChange={(id, status) =>
+                        setApplications(
+                          applications.map((item) =>
+                            item.id === id ? { ...item, status } : item,
+                          ),
+                        )
+                      }
+                      onFollowUpChange={(id, followUp) =>
+                        setApplications(
+                          applications.map((item) =>
+                            item.id === id ? { ...item, followUp } : item,
+                          ),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+                <DragOverlay>
+                  {draggedApplication && (
+                    <article className="application-card drag-overlay-card">
+                      <small>{draggedApplication.company}</small>
+                      <h3>{draggedApplication.position}</h3>
+                    </article>
+                  )}
+                </DragOverlay>
+              </DndContext>
             </>
           )}
           {tab === "Resumes" && (
@@ -1171,6 +1189,101 @@ function App() {
         </div>
       </aside>
     </div>
+  );
+}
+function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `col-${stage}` });
+  return (
+    <section
+      className={`board-column ${isOver ? "is-drop-target" : ""}`}
+      ref={setNodeRef}
+    >
+      <h2>
+        <span className={`stage-dot ${stage}`} />
+        {stage}
+        <span className="count">{apps.length}</span>
+      </h2>
+      <SortableContext
+        items={apps.map((a) => a.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        {apps.map((a) => (
+          <ApplicationCard
+            key={a.id}
+            application={a}
+            onStatusChange={onStatusChange}
+            onFollowUpChange={onFollowUpChange}
+          />
+        ))}
+      </SortableContext>
+      {!apps.length && <p className="column-empty">No applications here yet.</p>}
+      {stage === "Offer" && (
+        <div className="offer-doodle" aria-hidden="true">
+          <img
+            src="/memes/hamster-doodle.png"
+            alt=""
+            width="140"
+            height="140"
+          />
+        </div>
+      )}
+      {stage === "Applied" && (
+        <figure className="tab-meme application-meme">
+          <img
+            src="/memes/praying.jpg"
+            alt="Black-and-white reaction image of two men praying"
+            width="735"
+            height="577"
+          />
+          <figcaption>after clicking submit</figcaption>
+        </figure>
+      )}
+    </section>
+  );
+}
+function ApplicationCard({ application, onStatusChange, onFollowUpChange }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: application.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <article className="application-card" ref={setNodeRef} style={style}>
+      <div
+        className="application-card-handle"
+        aria-label={`Drag to move ${application.position} at ${application.company}`}
+        {...attributes}
+        {...listeners}
+      >
+        <div className="application-card-top">
+          <GripVertical size={16} className="drag-icon" aria-hidden="true" />
+          <small>{application.company}</small>
+        </div>
+        <h3>{application.position}</h3>
+        <p>Applied {application.date}</p>
+      </div>
+      <label>
+        Stage
+        <select
+          value={application.status}
+          onChange={(e) => onStatusChange(application.id, e.target.value)}
+        >
+          {stages.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Follow-up date
+        <input
+          type="date"
+          value={application.followUp}
+          onChange={(e) => onFollowUpChange(application.id, e.target.value)}
+        />
+      </label>
+    </article>
   );
 }
 function Modal({ children, onClose }) {
