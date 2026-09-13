@@ -1321,3 +1321,70 @@ footer {
     width: 100px;
   }
 }
+.brainrot-toggle {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 30px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid #951a3c;
+  border-right: none;
+  border-radius: 12px 0 0 12px;
+  background: #a11636;
+  color: #fbf3f5;
+  box-shadow: -3px 3px 0 rgba(65, 27, 40, 0.18);
+  transition:
+    right 0.4s ease,
+    background 0.2s ease;
+}
+.brainrot-toggle:hover {
+  background: #883853;
+}
+.brainrot-toggle.is-open {
+  right: 34vw;
+}
+.brainrot-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 34vw;
+  height: 100vh;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  background: #1a1015;
+  border-left: 3px double #951a3c;
+  box-shadow: -8px 0 24px rgba(65, 27, 40, 0.25);
+  transform: translateX(100%);
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.brainrot-panel.is-open {
+  transform: translateX(0);
+}
+.brainrot-split {
+  position: relative;
+  flex: 1 1 50%;
+  min-height: 0;
+  overflow: hidden;
+}
+.brainrot-split + .brainrot-split {
+  border-top: 3px double #951a3c;
+}
+.brainrot-split iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+@media (max-width: 800px) {
+  .brainrot-panel {
+    width: 78vw;
+  }
+  .brainrot-toggle.is-open {
+    right: 78vw;
+  }
+}

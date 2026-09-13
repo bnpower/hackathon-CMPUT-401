@@ -19,6 +19,8 @@ import {
   Check,
   Bell,
   SlidersHorizontal,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import "./styles.css";
 import "./personality.css";
@@ -228,7 +230,8 @@ function App() {
     [page, setPage] = useState(1),
     [savedOnly, setSavedOnly] = useState(false),
     [modal, setModal] = useState(null),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [brainrotOpen, setBrainrotOpen] = useState(false);
   // Keep the original storage keys so the rebrand preserves existing user edits.
   const [saved, setSaved, savedError] = useSaved("sprout-saved", []),
     [applications, setApplications, appsError] = useSaved(
@@ -1130,6 +1133,43 @@ function App() {
           )}
         </Modal>
       )}
+      <button
+        className={`brainrot-toggle ${brainrotOpen ? "is-open" : ""}`}
+        aria-label={brainrotOpen ? "Hide focus break" : "Show focus break"}
+        aria-expanded={brainrotOpen}
+        onClick={() => setBrainrotOpen(!brainrotOpen)}
+      >
+        {brainrotOpen ? (
+          <ChevronsRight size={18} />
+        ) : (
+          <ChevronsLeft size={18} />
+        )}
+      </button>
+      <aside
+        className={`brainrot-panel ${brainrotOpen ? "is-open" : ""}`}
+        aria-hidden={!brainrotOpen}
+      >
+        <div className="brainrot-split">
+          {brainrotOpen && (
+            <iframe
+              title="Minecraft parkour"
+              src="https://www.youtube.com/embed/pCW_yTzfvQM?autoplay=1&mute=1&loop=1&playlist=pCW_yTzfvQM&controls=0&modestbranding=1&playsinline=1"
+              allow="autoplay; encrypted-media"
+              frameBorder="0"
+            />
+          )}
+        </div>
+        <div className="brainrot-split">
+          {brainrotOpen && (
+            <iframe
+              title="Roblox obby"
+              src="https://www.youtube.com/embed/fPh_SaPwqYs?autoplay=1&mute=1&loop=1&playlist=fPh_SaPwqYs&controls=0&modestbranding=1&playsinline=1"
+              allow="autoplay; encrypted-media"
+              frameBorder="0"
+            />
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
