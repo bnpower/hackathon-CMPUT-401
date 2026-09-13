@@ -8,7 +8,6 @@ import {
   LayoutGrid,
   FileText,
   MessageSquare,
-  Sparkles,
   Bookmark,
   Plus,
   X,
@@ -22,6 +21,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   DndContext,
@@ -42,6 +43,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import "./styles.css";
 import "./personality.css";
+import "./readability.css";
 import ResumeUploads from "./ResumeUploads";
 
 const jobLore = {
@@ -220,6 +222,27 @@ const initialApplications = [
   },
 ];
 const stages = ["Applied", "Interview", "Offer", "Rejection"];
+const stageMemes = {
+  Applied: ["image-folder/01.png", "Unimpressed character waiting patiently", "sent it. now we wait."],
+  Interview: ["image-folder/03.png", "Serious character in a suit with folded hands", "time to explain the resume lore"],
+  Offer: ["image-folder/07.png", "Character giving an enthusiastic thumbs-up", "the employment arc is real"],
+  Rejection: ["image-folder/02.png", "Character dramatically crying rivers of tears", "their loss. next side quest."],
+};
+const responseMemes = {
+  "Interview invitation": ["image-folder/08.png", "Wide-eyed character screaming", "THEY WANT TO TALK TO ME?"],
+  "Job offer": stageMemes.Offer,
+  Rejection: stageMemes.Rejection,
+  "Follow-up": ["image-folder/04.png", "Determined character raising a fist", "politely asking for the lore update"],
+  Other: stageMemes.Applied,
+};
+function ReactionMeme({ meme, className = "" }) {
+  return (
+    <figure className={`tab-meme ${className}`}>
+      <img src={`/memes/${meme[0]}`} alt={meme[1]} loading="lazy" />
+      <figcaption>{meme[2]}</figcaption>
+    </figure>
+  );
+}
 function useSaved(key, fallback) {
   const [value, setValue] = useState(() => {
     try {
@@ -350,9 +373,8 @@ function App() {
             navigate("Jobs");
           }}
         >
-          <span className="brand-icon">
-            <span className="logo-halo" aria-hidden="true" />
-            <Sparkles size={21} aria-hidden="true" />
+          <span className="brand-icon angel-logo">
+            <img src="/memes/image.png" alt="" width="58" height="58" />
           </span>
           <span className="brand-name">
             Hire Power<span className="brand-dot">.</span>
@@ -462,6 +484,13 @@ function App() {
               </button>
             </div>
           )}
+          <button className="reminders-banner" onClick={() => setModal({ kind: "reminders" })}>
+            <Bell size={28} aria-hidden="true" />
+            <span><strong>{upcoming.length ? `${upcoming.length} follow-up${upcoming.length === 1 ? "" : "s"} on your radar` : "Your follow-up reminders"}</strong>
+              <small>{upcoming.length ? `Next: ${upcoming[0].company} · ${upcoming[0].followUp}` : "Add a follow-up date in Applications to stay on track."}</small>
+            </span>
+            <span className="reminders-link">View reminders <ArrowRight size={20} /></span>
+          </button>
           {tab === "Jobs" && (
             <>
               <section
@@ -535,18 +564,21 @@ function App() {
                 <div className="section-heading">
                   <div>
                     <h2>
-                      Listings <span className="count">{filtered.length}</span>
+                      {savedOnly ? "Saved jobs" : "Listings"} <span className="count">{filtered.length}</span>
                     </h2>
                   </div>
                   <button
-                    className={`text-button ${savedOnly ? "selected" : ""}`}
+                    className={`saved-jobs-button ${savedOnly ? "is-active" : ""}`}
+                    aria-pressed={savedOnly}
                     onClick={() => {
                       setSavedOnly(!savedOnly);
                       setPage(1);
                     }}
                   >
-                    <Bookmark size={16} />
-                    {savedOnly ? "Show all jobs" : "Saved jobs"}
+                    <Bookmark size={26} aria-hidden="true" fill={savedOnly ? "currentColor" : "none"} />
+                    <span>{savedOnly ? "Show all jobs" : "View saved jobs"}</span>
+                    <span className="saved-jobs-count" aria-label={`${saved.length} saved jobs`}>{saved.length}</span>
+                    <ArrowRight size={22} aria-hidden="true" />
                   </button>
                 </div>
                 <div className="filters">
@@ -731,16 +763,6 @@ function App() {
           )}
           {tab === "Applications" && (
             <>
-              <div className="info-strip">
-                <Bell size={18} />
-                {upcoming.length} follow-ups to keep on your radar.
-                <button
-                  className="text-button"
-                  onClick={() => setModal({ kind: "reminders" })}
-                >
-                  View reminders <ArrowRight size={15} />
-                </button>
-              </div>
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}
@@ -823,14 +845,7 @@ function App() {
                     Edits save automatically in this browser. Download a copy to
                     keep it with you.
                   </p>
-                  <figure className="tab-meme resume-meme">
-                    <img
-                      src="/memes/lock-in.jpg"
-                      alt="Monkey pointing at its head with the caption time to lock in"
-                      width="735"
-                      height="729"
-                    />
-                  </figure>
+                  <ReactionMeme className="resume-meme" meme={["image-folder/06.png", "Character smiling mischievously", "me turning the group project into leadership experience"]} />
                 </section>
                 <section className="resume-editor">
                   <div className="section-heading">
@@ -890,17 +905,22 @@ function App() {
                       <div className="stat-icon">
                         <MessageSquare size={20} />
                       </div>
-                      <div>
+                      <div className="message-content">
                         <span className="tag">{m.type}</span>
                         <h3>{m.company}</h3>
                         <p>{m.notes}</p>
                         <small>{m.date}</small>
                       </div>
+                      <ReactionMeme className="message-reaction" meme={responseMemes[m.type] ?? responseMemes.Other} />
+                      <div className="message-actions">
+                        <button className="secondary" aria-label={`Edit log for ${m.company}`} onClick={() => setModal({ kind: "message", message: m })}><Pencil size={18} /> Edit</button>
+                        <button className="secondary" aria-label={`Delete log for ${m.company}`} onClick={() => setModal({ kind: "delete-message", message: m })}><Trash2 size={18} /> Delete</button>
+                      </div>
                     </article>
                   ))
               ) : (
                 <div className="empty">
-                  <MessageSquare size={32} />
+                  <ReactionMeme className="inbox-waiting-meme" meme={["image-folder/05.png", "Sad character watching something crumble into dust", "me waiting for the recruiter to reply"]} />
                   <h3>No messages yet.</h3>
                   <p>
                     Keep interview invitations, feedback, and offers together.
@@ -912,14 +932,6 @@ function App() {
                     <Plus size={16} />
                     Log your first response
                   </button>
-                  <img
-                    className="inbox-corner-doodle"
-                    src="/memes/hamster-doodle.png"
-                    alt=""
-                    aria-hidden="true"
-                    width="95"
-                    height="95"
-                  />
                 </div>
               )}
             </section>
@@ -940,7 +952,8 @@ function App() {
                   : modal.kind === "resume"
                     ? "Make it your own"
                     : modal.kind === "message"
-                      ? "Log a communication"
+                      ? modal.message ? "Edit communication" : "Log a communication"
+                      : modal.kind === "delete-message" ? "Delete this log?"
                       : "Your follow-up reminders"}
             </h2>
             <button
@@ -970,6 +983,9 @@ function App() {
                 <h3>Requirements</h3>
                 <p>{jobLore[modal.job.id][2]}</p>
               </div>
+              {modal.job.id === 4 && (
+                <ReactionMeme className="job-detail-meme" meme={["image-folder/09.png", "Pig-faced character taking a selfie beside coastal cliffs", "first day at Touch Grass Technologies"]} />
+              )}
               <p className="muted">
                 This is a fictional opportunity for exploring Hire Power.
                 Tracking it creates a local application record; it does not
@@ -1069,27 +1085,22 @@ function App() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                setMessages([
-                  ...messages,
-                  {
-                    ...Object.fromEntries(new FormData(e.target)),
-                    id: Date.now(),
-                  },
-                ]);
+                const entry = { ...Object.fromEntries(new FormData(e.target)), id: modal.message?.id ?? Date.now() };
+                setMessages(modal.message ? messages.map((m) => m.id === entry.id ? entry : m) : [...messages, entry]);
                 setModal(null);
                 setNotice(
-                  "Communication logged. Update the application stage in Applications if needed.",
+                  modal.message ? "Communication updated." : "Communication logged. Update the application stage in Applications if needed.",
                 );
               }}
             >
               <label>
                 Company
-                <input name="company" required maxLength={100} />
+                <input name="company" required maxLength={100} defaultValue={modal.message?.company} />
               </label>
               <div className="form-row">
                 <label>
                   Response type
-                  <select name="type">
+                  <select name="type" defaultValue={modal.message?.type}>
                     {[
                       "Interview invitation",
                       "Rejection",
@@ -1107,7 +1118,7 @@ function App() {
                     name="date"
                     type="date"
                     required
-                    defaultValue={new Date().toLocaleDateString("en-CA")}
+                    defaultValue={modal.message?.date ?? new Date().toLocaleDateString("en-CA")}
                   />
                 </label>
               </div>
@@ -1115,14 +1126,28 @@ function App() {
                 Notes
                 <textarea
                   name="notes"
+                  defaultValue={modal.message?.notes}
                   required
                   placeholder="What did they say? What happens next?"
                 />
               </label>
               <button className="primary" type="submit">
-                Save communication <Check size={16} />
+                {modal.message ? "Save changes" : "Save communication"} <Check size={16} />
               </button>
             </form>
+          )}
+          {modal.kind === "delete-message" && (
+            <div>
+              <p>Delete the {modal.message.type.toLowerCase()} log for <strong>{modal.message.company}</strong> from {modal.message.date}? This cannot be undone.</p>
+              <div className="message-actions">
+                <button className="secondary" onClick={() => setModal(null)}>Cancel</button>
+                <button className="primary" onClick={() => {
+                  setMessages(messages.filter((m) => m.id !== modal.message.id));
+                  setModal(null);
+                  setNotice("Communication deleted.");
+                }}><Trash2 size={18} /> Delete log</button>
+              </div>
+            </div>
           )}
           {modal.kind === "reminders" && (
             <>
@@ -1217,27 +1242,7 @@ function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange }) {
         ))}
       </SortableContext>
       {!apps.length && <p className="column-empty">No applications here yet.</p>}
-      {stage === "Offer" && (
-        <div className="offer-doodle" aria-hidden="true">
-          <img
-            src="/memes/hamster-doodle.png"
-            alt=""
-            width="140"
-            height="140"
-          />
-        </div>
-      )}
-      {stage === "Applied" && (
-        <figure className="tab-meme application-meme">
-          <img
-            src="/memes/praying.jpg"
-            alt="Black-and-white reaction image of two men praying"
-            width="735"
-            height="577"
-          />
-          <figcaption>after clicking submit</figcaption>
-        </figure>
-      )}
+      <ReactionMeme className="application-meme" meme={stageMemes[stage]} />
     </section>
   );
 }

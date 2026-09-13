@@ -1,0 +1,84 @@
+/* Larger reactions and clear, comfortably sized workspace actions. */
+.brand-icon.angel-logo { width: 58px; height: 58px; background: transparent; border: 0; box-shadow: none; margin-right: 6px; }
+.angel-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.brand:has(.angel-logo) { font-size: 25px; letter-spacing: -1.4px; }
+@media (min-width: 801px) and (max-width: 1150px) {
+  .brand:has(.angel-logo) { font-size: 22px; }
+  .brand-icon.angel-logo { width: 48px; height: 48px; }
+}
+@media (max-width: 800px) {
+  .brand-icon.angel-logo { width: 52px; height: 52px; margin: 0; }
+}
+.saved-jobs-button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 58px; padding: 12px 20px; background: #a11636; color: #fff6f8; border: 2px solid #65142c; border-radius: 4px; box-shadow: 4px 4px 0 #cf8199; font-size: 17px; font-weight: 700; text-decoration: none; }
+.saved-jobs-button:hover { background: #7c102b; }
+.saved-jobs-button.is-active { background: #fff5f6; color: #861331; }
+.saved-jobs-button.is-active:hover { background: #ffd6e1; }
+.saved-jobs-button svg { flex-shrink: 0; }
+.saved-jobs-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding-inline: 7px; border-radius: 6px; background: #fff5f6; color: #861331; font-size: 15px; }
+.saved-jobs-button.is-active .saved-jobs-count { background: #a11636; color: white; }
+@media (max-width: 540px) {
+  .jobs-section > .section-heading { flex-wrap: wrap; gap: 16px; }
+  .saved-jobs-button { width: 100%; }
+}
+.desktop-meme { max-width: 760px; }
+.desktop-meme img { height: auto; aspect-ratio: 1000 / 562; object-fit: contain; }
+.recruiter-meme { width: min(100%, 320px); }
+.recruiter-meme img { height: auto; aspect-ratio: 279 / 286; object-fit: contain; }
+.desktop-meme figcaption { font-size: clamp(18px, 2vw, 24px); }
+.recruiter-meme figcaption, .recruiter-meme figcaption strong,
+.tab-meme figcaption { font-size: 16px; line-height: 1.45; }
+.save-button { min-width: 48px; min-height: 48px; border: 1px solid #a5526e; background: #fff5f6; border-radius: 6px; flex-shrink: 0; }
+.save-button svg { width: 28px; height: 28px; }
+.save-button.is-saved { background: #f7b5ca; color: #861331; border-width: 2px; }
+.text-button, .primary, .secondary, .job-open { min-height: 44px; font-size: 14px; }
+.text-button svg { width: 22px; height: 22px; }
+.icon-button { min-width: 44px; min-height: 44px; }
+.search input, .filter select, .card-top strong, .job-roast { font-size: 14px; }
+.location, .tags span, .tag, .results-label, .stat > div > span { font-size: 13px; }
+.reminders-banner { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 90px; padding: 18px 22px; margin: 0 0 28px; text-align: left; color: #59152c; background: #ffc9dc; border: 2px solid #9d294a; border-left-width: 7px; box-shadow: 4px 4px 0 #b5678438; }
+.reminders-banner:hover { background: #ffb6d0; }
+.reminders-banner > svg { flex-shrink: 0; }
+.reminders-banner > span { min-width: 0; }
+.reminders-banner strong { display: block; font-size: 18px; }
+.reminders-banner small { display: block; margin-top: 6px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.reminders-link { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; font-size: 15px; font-weight: 700; }
+.application-meme { width: 100%; max-width: 320px; margin: 24px auto 8px; transform: none; }
+.application-meme img { height: 230px; object-fit: contain; background: white; }
+.inbox { grid-template-columns: minmax(0, 1fr) 280px; }
+.inbox-meme img { height: 300px; object-fit: cover; }
+.message-card { flex-wrap: wrap; }
+.message-content { flex: 1 1 200px; min-width: 0; }
+.message-content h3 { overflow-wrap: anywhere; }
+.message-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.message-card .message-actions { flex-basis: 100%; }
+.message-reaction { flex: 0 1 180px; width: 180px; max-width: 100%; margin: 0; transform: none; }
+.message-reaction img { height: 160px; object-fit: contain; background: #f5f5f5; }
+.message-reaction figcaption { font-size: 14px; }
+.inbox-waiting-meme { width: min(100%, 250px); margin: 0 0 22px; transform: none; }
+.inbox-waiting-meme img { max-height: 230px; object-fit: contain; }
+.job-detail-meme { width: min(100%, 320px); margin: 24px auto; transform: none; }
+.resume-meme { width: 100%; max-width: 320px; }
+.brainrot-toggle { width: 44px; height: 80px; }
+.brainrot-panel { width: min(48vw, 760px); height: 100dvh; }
+.brainrot-toggle.is-open { right: min(48vw, 760px); }
+@media (max-width: 1100px) {
+  .inbox { grid-template-columns: minmax(0, 1fr) 220px; }
+}
+@media (max-width: 800px) {
+  .inbox { grid-template-columns: minmax(0, 1fr); }
+  .inbox .inbox-meme { width: min(100%, 280px); }
+  .reminders-banner { flex-wrap: wrap; padding: 16px; gap: 12px; }
+  .reminders-banner > span:first-of-type { flex: 1; }
+  .reminders-link { margin-left: 40px; }
+  .brainrot-panel { width: calc(100vw - 52px); }
+  .brainrot-toggle.is-open { right: calc(100vw - 52px); }
+}
+@media (max-width: 540px) {
+  .meme-board { grid-template-columns: minmax(0, 1fr); gap: 30px; padding: 18px 8px 30px; }
+  .recruiter-meme { width: min(100%, 300px); }
+  .reminders-banner strong { font-size: 16px; }
+  .application-meme img { height: 250px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brainrot-panel, .brainrot-toggle { transition: none; }
+}
