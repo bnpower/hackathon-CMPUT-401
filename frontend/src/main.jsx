@@ -679,9 +679,8 @@ function AuthPage({ onEmailAuth, authError }) {
         <main className="auth-page">
             <section className="auth-card" aria-labelledby="auth-title">
                 <a className="brand auth-brand" href="#" onClick={(e) => e.preventDefault()}>
-                    <span className="brand-icon">
-                        <span className="logo-halo" aria-hidden="true" />
-                        <Sparkles size={21} aria-hidden="true" />
+                    <span className="brand-icon auth-logo">
+                        <img src="/favicon/android-chrome-192x192.png" alt="" width="39" height="39" aria-hidden="true" />
                     </span>
                     <span className="brand-name">
                         Hire Power<span className="brand-dot">.</span>
