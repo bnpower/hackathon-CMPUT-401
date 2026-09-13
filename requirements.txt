@@ -1,6 +1,0 @@
-# Backend dependencies now live in backend/pyproject.toml.
-# Install and run the API with uv:
-#   cd backend
-#   uv sync
-#   uv run python manage.py migrate
-#   uv run python manage.py runserver 127.0.0.1:8000
