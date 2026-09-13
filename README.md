@@ -1,6 +1,6 @@
 # HirePower
 
-HirePower is a full-stack job application tracker for CS-related jobs. The frontend is a React/Tailwind app with a TikTok/Instagram-inspired scrollable job feed, saved/tracked applications, a Harvard-style resume editor, onboarding preferences, and light/dark green/cream/yellow theming. The backend is a Django REST API managed with [`uv`](https://docs.astral.sh/uv/).
+HirePower is a full-stack job application tracker for CS-related jobs. The frontend is a React/Tailwind app with a TikTok/Instagram-inspired scrollable job feed, saved/tracked applications, a structured resume editor, onboarding preferences, and light/dark green/cream/yellow theming. The backend is a Django REST API managed with [`uv`](https://docs.astral.sh/uv/).
 
 ## Project layout
 

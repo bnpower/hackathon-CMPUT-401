@@ -103,7 +103,7 @@ Security-sensitive settings are intentionally strict when `DJANGO_DEBUG=0`:
 | `DELETE`       | `/api/saved-jobs/by-job/{job_id}/`     | Unsave a frontend job listing                      |
 | `GET/POST`     | `/api/resumes/`                        | List/create editable text resumes                  |
 | `PATCH/DELETE` | `/api/resumes/{id}/`                   | Update or remove a text resume                     |
-| `GET/POST`     | `/api/resume-documents/`               | List/upload PDF or DOCX resume files               |
+| `GET/POST`     | `/api/resume-documents/`               | List/upload PDF, DOCX, PNG, or JPEG resume files   |
 | `GET`          | `/api/resume-documents/{id}/download/` | Download an uploaded resume document               |
 | `GET/POST`     | `/api/communications/`                 | List/create inbox communication notes              |
 

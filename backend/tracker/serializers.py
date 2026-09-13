@@ -6,17 +6,30 @@ from .models import Application, Communication, ResumeDocument, SavedJob, TextRe
 
 MASTER_RESUME_CONTENT = "YOUR NAME\nEmail · Phone · Portfolio\n\nABOUT ME\nWrite a short introduction about your interests and experience.\n\nEXPERIENCE\nRole · Company · Dates\n• Describe your contribution and its impact.\n\nEDUCATION\nDegree · University · Graduation year\n\nSKILLS\nAdd your relevant skills."
 MAX_RESUME_BYTES = 10 * 1024 * 1024
-ALLOWED_EXTENSIONS = {"pdf", "docx"}
+ALLOWED_EXTENSIONS = {"pdf", "docx", "png", "jpg", "jpeg"}
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
-    followUp = serializers.DateField(source="follow_up", required=False, allow_null=True)
-    sourceJobId = serializers.IntegerField(source="source_job_id", required=False, allow_null=True)
+    followUp = serializers.DateField(
+        source="follow_up", required=False, allow_null=True
+    )
+    sourceJobId = serializers.IntegerField(
+        source="source_job_id", required=False, allow_null=True
+    )
     jobPayload = serializers.JSONField(source="job_payload", required=False)
 
     class Meta:
         model = Application
-        fields = ("id", "company", "position", "date", "status", "followUp", "sourceJobId", "jobPayload")
+        fields = (
+            "id",
+            "company",
+            "position",
+            "date",
+            "status",
+            "followUp",
+            "sourceJobId",
+            "jobPayload",
+        )
 
     def create(self, validated_data):
         validated_data["user"] = self.context["request"].user
@@ -57,7 +70,9 @@ class TextResumeSerializer(serializers.ModelSerializer):
             if self.instance:
                 existing = existing.exclude(pk=self.instance.pk)
             if existing.exists():
-                raise serializers.ValidationError({"master": "Only one master resume is allowed."})
+                raise serializers.ValidationError(
+                    {"master": "Only one master resume is allowed."}
+                )
         return attrs
 
     def create(self, validated_data):
@@ -71,8 +86,25 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ResumeDocument
-        fields = ("id", "name", "extension", "size", "content_type", "addedAt", "downloadUrl", "file")
-        read_only_fields = ("id", "name", "extension", "size", "content_type", "addedAt", "downloadUrl")
+        fields = (
+            "id",
+            "name",
+            "extension",
+            "size",
+            "content_type",
+            "addedAt",
+            "downloadUrl",
+            "file",
+        )
+        read_only_fields = (
+            "id",
+            "name",
+            "extension",
+            "size",
+            "content_type",
+            "addedAt",
+            "downloadUrl",
+        )
         extra_kwargs = {"file": {"write_only": True}}
 
     def get_downloadUrl(self, obj):
@@ -83,18 +115,34 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
     def validate_file(self, file):
         extension = Path(file.name).suffix.lower().lstrip(".")
         if extension not in ALLOWED_EXTENSIONS:
-            raise serializers.ValidationError("Choose a PDF or DOCX file.")
+            raise serializers.ValidationError(
+                "Choose a PDF, DOCX, PNG, JPG, or JPEG file."
+            )
         if file.size == 0:
-            raise serializers.ValidationError("That file is empty. Choose another resume.")
+            raise serializers.ValidationError(
+                "That file is empty. Choose another resume."
+            )
         if file.size > MAX_RESUME_BYTES:
-            raise serializers.ValidationError("That file is too large. The limit is 10 MB.")
+            raise serializers.ValidationError(
+                "That file is too large. The limit is 10 MB."
+            )
 
-        header = file.read(5)
+        header = file.read(12)
         file.seek(0)
-        if extension == "pdf" and header != b"%PDF-":
+        if extension == "pdf" and not header.startswith(b"%PDF-"):
             raise serializers.ValidationError("That file does not appear to be a PDF.")
         if extension == "docx" and not header.startswith(b"PK"):
-            raise serializers.ValidationError("That file does not appear to be a DOCX document.")
+            raise serializers.ValidationError(
+                "That file does not appear to be a DOCX document."
+            )
+        if extension == "png" and not header.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise serializers.ValidationError(
+                "That file does not appear to be a PNG image."
+            )
+        if extension in {"jpg", "jpeg"} and not header.startswith(b"\xff\xd8\xff"):
+            raise serializers.ValidationError(
+                "That file does not appear to be a JPEG image."
+            )
         return file
 
     def create(self, validated_data):

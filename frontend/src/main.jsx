@@ -21,6 +21,9 @@ import {
     SlidersHorizontal,
     LogOut,
     Upload,
+    Eye,
+    EyeOff,
+    Trash2,
 } from "lucide-react";
 import "./styles.css";
 import "./personality.css";
@@ -29,6 +32,63 @@ import { importResumeFile, RESUME_IMPORT_LIMITATIONS } from "./resumeImport";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const AUTH_STORAGE_KEY = "hire-power-auth";
+const RESUME_SECTIONS = ["education", "experience", "skills", "projects"];
+const SECTION_LABELS = {
+    education: "Education",
+    experience: "Work Experience",
+    skills: "Skills",
+    projects: "Projects",
+};
+const EMPTY_CONTACT = { fullName: "", email: "", phone: "", location: "", website: "", linkedin: "" };
+const STARTER_RESUME_DATA = {
+    contact: { ...EMPTY_CONTACT, fullName: "Your Name", email: "email@example.com", location: "Canada" },
+    sections: {
+        education: [
+            {
+                id: 1,
+                title: "University Name",
+                subtitle: "Bachelor of Science in Computer Science",
+                location: "Canada",
+                period: "2022 – 2026",
+                details: "Relevant coursework: Data Structures, Algorithms, Databases",
+                visible: true,
+            },
+        ],
+        experience: [
+            {
+                id: 2,
+                title: "Software Developer Intern",
+                subtitle: "Company Name",
+                location: "Canada",
+                period: "May 2025 – Aug 2025",
+                details: "Built and tested production features\nCollaborated with engineers, designers, and product managers",
+                visible: true,
+            },
+        ],
+        skills: [
+            {
+                id: 3,
+                title: "Technical Skills",
+                subtitle: "",
+                location: "",
+                period: "",
+                details: "Python, JavaScript, React, Django, PostgreSQL, Git",
+                visible: true,
+            },
+        ],
+        projects: [
+            {
+                id: 4,
+                title: "Job Application Tracker",
+                subtitle: "React · Django",
+                location: "",
+                period: "2026",
+                details: "Built a full-stack application tracker with resume customization",
+                visible: true,
+            },
+        ],
+    },
+};
 
 function isConfiguredOAuthClientId(clientId, provider) {
     if (!clientId) return false;
@@ -79,6 +139,101 @@ function getStoredAuth() {
 
 function userInitial(user) {
     return (user?.name || user?.email || "Y").trim().charAt(0).toUpperCase();
+}
+
+function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function emptyResumeData() {
+    return clone(STARTER_RESUME_DATA);
+}
+
+function makeResumeEntry(section) {
+    const labels = {
+        education: ["School or university", "Degree / program"],
+        experience: ["Job title", "Company / organization"],
+        skills: ["Skill group", ""],
+        projects: ["Project name", "Technologies / role"],
+    }[section];
+    return { id: Date.now() + Math.random(), title: labels[0], subtitle: labels[1], location: "", period: "", details: "", visible: true };
+}
+
+function makeResumePayload(data, meta = {}) {
+    return JSON.stringify({ version: 2, type: "hire-power-structured-resume", meta, data });
+}
+
+function plainTextToResumeData(content = "") {
+    const data = emptyResumeData();
+    const text = String(content || "")
+        .replace(/\r\n?/g, "\n")
+        .trim();
+    if (!text) return data;
+    const lines = text.split("\n");
+    data.contact.fullName = lines[0]?.trim() || data.contact.fullName;
+    const header = lines.slice(1, 4).join(" | ");
+    const email = header.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+    if (email) data.contact.email = email;
+    const sections = { education: [], experience: [], skills: [], projects: [] };
+    let current = null;
+    for (const line of lines.slice(1)) {
+        const key = line.trim().toLowerCase().replace(/:$/, "");
+        if (["education", "work experience", "experience", "skills", "projects"].includes(key)) {
+            current = key.includes("experience") ? "experience" : key;
+            if (current === "work experience") current = "experience";
+            continue;
+        }
+        if (current && line.trim()) sections[current].push(line.replace(/^[-•*]\s*/, ""));
+    }
+    RESUME_SECTIONS.forEach((section) => {
+        if (sections[section].length) {
+            data.sections[section] = [
+                { ...makeResumeEntry(section), title: SECTION_LABELS[section], subtitle: "", details: sections[section].join("\n"), visible: true },
+            ];
+        }
+    });
+    return data;
+}
+
+function resumeEnvelope(resume) {
+    try {
+        const parsed = JSON.parse(resume?.content || "");
+        if (parsed?.type === "hire-power-structured-resume" && parsed?.data?.sections) {
+            const data = parsed.data;
+            return {
+                version: 2,
+                meta: parsed.meta || {},
+                data: {
+                    contact: { ...EMPTY_CONTACT, ...(data.contact || {}) },
+                    sections: Object.fromEntries(
+                        RESUME_SECTIONS.map((section) => [section, Array.isArray(data.sections?.[section]) ? data.sections[section] : []]),
+                    ),
+                },
+            };
+        }
+    } catch {
+        // Older resumes are plain text; convert them for the structured editor.
+    }
+    return { version: 1, meta: {}, data: plainTextToResumeData(resume?.content || "") };
+}
+
+function resumeDataToFormattedText(data) {
+    const contact = [data.contact.location, data.contact.phone, data.contact.email, data.contact.website, data.contact.linkedin].filter(Boolean).join(" | ");
+    const parts = [(data.contact.fullName || "Your Name").toUpperCase(), contact, ""];
+    RESUME_SECTIONS.forEach((section) => {
+        const entries = (data.sections[section] || []).filter((entry) => entry.visible !== false && [entry.title, entry.subtitle, entry.details].some(Boolean));
+        if (!entries.length) return;
+        parts.push(SECTION_LABELS[section].toUpperCase());
+        entries.forEach((entry) => {
+            parts.push([entry.title, entry.subtitle, entry.location, entry.period].filter(Boolean).join(" | "));
+            String(entry.details || "")
+                .split("\n")
+                .filter(Boolean)
+                .forEach((line) => parts.push(`• ${line.replace(/^[-•*]\s*/, "")}`));
+        });
+        parts.push("");
+    });
+    return parts.join("\n").trim();
 }
 
 const jobLore = {
@@ -493,8 +648,7 @@ function App({ auth, user, onLogout }) {
             {
                 id: 1,
                 name: "My master resume",
-                content:
-                    "YOUR NAME\nEmail · Phone · Portfolio\n\nABOUT ME\nWrite a short introduction about your interests and experience.\n\nEXPERIENCE\nRole · Company · Dates\n• Describe your contribution and its impact.\n\nEDUCATION\nDegree · University · Graduation year\n\nSKILLS\nAdd your relevant skills.",
+                content: makeResumePayload(STARTER_RESUME_DATA, { source: "starter" }),
                 master: true,
             },
         ]),
@@ -569,7 +723,8 @@ function App({ auth, user, onLogout }) {
         }
     }
     function downloadResume() {
-        const url = URL.createObjectURL(new Blob([activeResume.content], { type: "text/plain" }));
+        const text = resumeDataToFormattedText(resumeEnvelope(activeResume).data);
+        const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
         const a = document.createElement("a");
         a.href = url;
         a.download = `${activeResume.name}.txt`;
@@ -624,6 +779,25 @@ function App({ auth, user, onLogout }) {
             setNotice(`Could not update resume: ${error.message}`);
         }
     }
+    async function deleteTextResume(resume) {
+        if (resume.master) {
+            setNotice("The master resume is required as your base template, so it cannot be deleted. You can rename and edit it instead.");
+            return;
+        }
+        if (!window.confirm(`Delete ${resume.name}? This custom resume cannot be recovered.`)) return;
+        const previous = resumes;
+        const next = resumes.filter((item) => item.id !== resume.id);
+        setResumes(next);
+        if (activeResume.id === resume.id) setResumeId((next.find((item) => item.master) || next[0])?.id || 1);
+        try {
+            await apiRequest(`/api/resumes/${resume.id}/`, auth.access, { method: "DELETE" });
+            setNotice("Custom resume deleted.");
+        } catch (error) {
+            setResumes(previous);
+            setResumeId(resume.id);
+            setNotice(`Could not delete resume: ${error.message}`);
+        }
+    }
     async function importTextResume(event) {
         const file = event.target.files?.[0];
         event.target.value = "";
@@ -633,8 +807,8 @@ function App({ auth, user, onLogout }) {
             const created = await apiRequest("/api/resumes/", auth.access, {
                 method: "POST",
                 body: JSON.stringify({
-                    name: file.name.replace(/\.txt$/i, "") || "Imported resume",
-                    content: imported.content,
+                    name: file.name.replace(/\.(txt|png|jpe?g)$/i, "") || "Imported resume",
+                    content: makeResumePayload(imported.data, { source: "import", originalFileName: file.name }),
                     master: false,
                 }),
             });
@@ -645,6 +819,68 @@ function App({ auth, user, onLogout }) {
             setNotice(`Could not import resume: ${error.message}`);
         }
     }
+    function updateStructuredResume(resume, nextData, nextMeta = resumeEnvelope(resume).meta) {
+        updateTextResume(resume.id, { content: makeResumePayload(nextData, nextMeta) });
+    }
+    function updateResumeContact(key, value) {
+        const envelope = resumeEnvelope(activeResume);
+        updateStructuredResume(activeResume, { ...envelope.data, contact: { ...envelope.data.contact, [key]: value } }, envelope.meta);
+    }
+    function updateResumeEntry(section, entryId, patch) {
+        const envelope = resumeEnvelope(activeResume);
+        const data = envelope.data;
+        updateStructuredResume(
+            activeResume,
+            {
+                ...data,
+                sections: { ...data.sections, [section]: data.sections[section].map((entry) => (entry.id === entryId ? { ...entry, ...patch } : entry)) },
+            },
+            envelope.meta,
+        );
+    }
+    function addResumeEntry(section) {
+        const envelope = resumeEnvelope(activeResume);
+        const data = envelope.data;
+        updateStructuredResume(
+            activeResume,
+            { ...data, sections: { ...data.sections, [section]: [...data.sections[section], makeResumeEntry(section)] } },
+            envelope.meta,
+        );
+    }
+    function removeResumeEntry(section, entryId) {
+        const envelope = resumeEnvelope(activeResume);
+        const data = envelope.data;
+        updateStructuredResume(
+            activeResume,
+            { ...data, sections: { ...data.sections, [section]: data.sections[section].filter((entry) => entry.id !== entryId) } },
+            envelope.meta,
+        );
+    }
+    async function createTailoredResume(name, jobId) {
+        const master = resumes.find((r) => r.master) || resumes[0];
+        const job = jobs.find((item) => String(item.id) === String(jobId));
+        const envelope = resumeEnvelope(master);
+        const created = await apiRequest("/api/resumes/", auth.access, {
+            method: "POST",
+            body: JSON.stringify({
+                name,
+                content: makeResumePayload(envelope.data, {
+                    source: "custom",
+                    jobId: job?.id || null,
+                    company: job?.company || "",
+                    position: job?.title || "",
+                }),
+                master: false,
+            }),
+        });
+        setResumes([...resumes, created]);
+        setResumeId(created.id);
+        setModal(null);
+        setNotice(job ? `Created a tailored resume for ${job.company} — ${job.title}.` : "Created a tailored resume.");
+    }
+    const activeEnvelope = resumeEnvelope(activeResume);
+    const activeResumeData = activeEnvelope.data;
+    const activeResumeMeta = activeEnvelope.meta;
     return (
         <div className="app">
             <a className="skip" href="#main">
@@ -1044,30 +1280,66 @@ function App({ auth, user, onLogout }) {
                     {tab === "Resumes" && (
                         <div>
                             <ResumeUploads accessToken={auth.access} apiBaseUrl={API_BASE_URL} />
-                            <div className="resume-layout">
+                            <div className="resume-layout structured-resume-layout">
                                 <section className="resume-list">
                                     <div className="resume-list-heading">
-                                        <h2>Your resumes</h2>
+                                        <div>
+                                            <h2>Resume library</h2>
+                                            <p>Start with your master resume, then tailor custom copies for specific jobs.</p>
+                                        </div>
                                         <button className="secondary" type="button" onClick={() => resumeImportInput.current?.click()}>
-                                            <Upload size={15} />
-                                            Import .txt
+                                            <Upload size={15} /> Import resume
                                         </button>
-                                        <input ref={resumeImportInput} type="file" accept=".txt,text/plain" onChange={importTextResume} hidden />
+                                        <input
+                                            ref={resumeImportInput}
+                                            type="file"
+                                            accept=".txt,text/plain,.png,.jpg,.jpeg,image/png,image/jpeg"
+                                            onChange={importTextResume}
+                                            hidden
+                                        />
                                     </div>
-                                    {resumes.map((r) => (
-                                        <button
-                                            key={r.id}
-                                            className={activeResume.id === r.id ? "resume-choice selected" : "resume-choice"}
-                                            onClick={() => setResumeId(r.id)}
-                                        >
-                                            <FileText size={20} />
-                                            <span>
-                                                {r.name}
-                                                <small>{r.master ? "Master template" : "Tailored copy"}</small>
-                                            </span>
-                                        </button>
-                                    ))}
-                                    <p>Edits save to your account. Download a copy to keep it with you. {RESUME_IMPORT_LIMITATIONS}</p>
+                                    {resumes.map((r) => {
+                                        const envelope = resumeEnvelope(r);
+                                        return (
+                                            <div key={r.id} className={activeResume.id === r.id ? "resume-choice-row selected" : "resume-choice-row"}>
+                                                <button
+                                                    className="resume-select-button"
+                                                    type="button"
+                                                    onClick={() => setResumeId(r.id)}
+                                                    aria-label={`Edit ${r.name}`}
+                                                >
+                                                    <FileText size={20} />
+                                                    <span>
+                                                        <strong>{r.master ? "Master" : "Custom"}</strong>
+                                                        <small>
+                                                            {r.master
+                                                                ? "Base resume"
+                                                                : envelope.meta?.company
+                                                                  ? `${envelope.meta.company} · ${envelope.meta.position}`
+                                                                  : "Tailored resume"}
+                                                        </small>
+                                                    </span>
+                                                </button>
+                                                <label className="resume-name-inline">
+                                                    <span>Resume name</span>
+                                                    <input value={r.name} onChange={(e) => updateTextResume(r.id, { name: e.target.value })} maxLength={120} />
+                                                </label>
+                                                <button
+                                                    className="text-button danger resume-delete-button"
+                                                    type="button"
+                                                    disabled={r.master}
+                                                    title={r.master ? "The master resume cannot be deleted." : "Delete custom resume"}
+                                                    onClick={() => deleteTextResume(r)}
+                                                >
+                                                    <Trash2 size={14} /> Delete
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                    <button className="primary create-tailored-button" type="button" onClick={() => setModal({ kind: "resume" })}>
+                                        <Plus size={16} /> Create custom resume
+                                    </button>
+                                    <p>{RESUME_IMPORT_LIMITATIONS}</p>
                                     <figure className="tab-meme resume-meme">
                                         <img
                                             src="/memes/lock-in.jpg"
@@ -1077,25 +1349,180 @@ function App({ auth, user, onLogout }) {
                                         />
                                     </figure>
                                 </section>
-                                <section className="resume-editor">
+                                <section className="resume-editor structured-resume-editor">
                                     <div className="section-heading">
-                                        <h2>{activeResume.name}</h2>
+                                        <div>
+                                            <label className="resume-title-edit">
+                                                Resume name
+                                                <input
+                                                    value={activeResume.name}
+                                                    onChange={(e) => updateTextResume(activeResume.id, { name: e.target.value })}
+                                                    maxLength={120}
+                                                />
+                                            </label>
+                                            {activeResume.master ? (
+                                                <p>Master resume used as the foundation for applications.</p>
+                                            ) : (
+                                                <p>
+                                                    Custom resume tied to {activeResumeMeta.company || "a specific job"}{" "}
+                                                    {activeResumeMeta.position ? `— ${activeResumeMeta.position}` : ""}.
+                                                </p>
+                                            )}
+                                        </div>
                                         <button className="secondary" onClick={downloadResume}>
-                                            Download .txt <ArrowUpRight size={16} />
+                                            Download formatted .txt <ArrowUpRight size={16} />
                                         </button>
                                     </div>
-                                    <label htmlFor="resume-content" className="eyebrow">
-                                        RESUME CONTENT · PLAIN TEXT
-                                    </label>
-                                    <textarea
-                                        id="resume-content"
-                                        value={activeResume.content}
-                                        onChange={(e) => updateTextResume(activeResume.id, { content: e.target.value })}
-                                    />
+                                    <div className="resume-contact-grid">
+                                        {[
+                                            ["fullName", "Full name"],
+                                            ["email", "Email"],
+                                            ["phone", "Phone"],
+                                            ["location", "Location"],
+                                            ["website", "Portfolio"],
+                                            ["linkedin", "LinkedIn"],
+                                        ].map(([key, label]) => (
+                                            <label key={key}>
+                                                {label}
+                                                <input value={activeResumeData.contact[key] || ""} onChange={(e) => updateResumeContact(key, e.target.value)} />
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {RESUME_SECTIONS.map((section) => (
+                                        <section className="resume-section-editor" key={section}>
+                                            <div className="resume-section-title">
+                                                <h3>{SECTION_LABELS[section]}</h3>
+                                                <button className="secondary" type="button" onClick={() => addResumeEntry(section)}>
+                                                    <Plus size={14} /> Add
+                                                </button>
+                                            </div>
+                                            {(activeResumeData.sections[section] || []).map((entry) => (
+                                                <article className={`resume-entry-editor ${entry.visible === false ? "hidden-entry" : ""}`} key={entry.id}>
+                                                    <div className="resume-entry-top">
+                                                        <button
+                                                            className="text-button"
+                                                            type="button"
+                                                            onClick={() => updateResumeEntry(section, entry.id, { visible: entry.visible === false })}
+                                                        >
+                                                            {entry.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}
+                                                            {entry.visible === false ? "Hidden for this job" : "Shown on resume"}
+                                                        </button>
+                                                        <button
+                                                            className="text-button danger"
+                                                            type="button"
+                                                            onClick={() => removeResumeEntry(section, entry.id)}
+                                                        >
+                                                            <Trash2 size={14} /> Remove
+                                                        </button>
+                                                    </div>
+                                                    <div className="resume-entry-grid">
+                                                        <label>
+                                                            {section === "education"
+                                                                ? "School"
+                                                                : section === "experience"
+                                                                  ? "Role"
+                                                                  : section === "skills"
+                                                                    ? "Skill group"
+                                                                    : "Project"}
+                                                            <input
+                                                                value={entry.title || ""}
+                                                                onChange={(e) => updateResumeEntry(section, entry.id, { title: e.target.value })}
+                                                            />
+                                                        </label>
+                                                        <label>
+                                                            {section === "education"
+                                                                ? "Degree"
+                                                                : section === "experience"
+                                                                  ? "Company"
+                                                                  : section === "skills"
+                                                                    ? "Context"
+                                                                    : "Technologies"}
+                                                            <input
+                                                                value={entry.subtitle || ""}
+                                                                onChange={(e) => updateResumeEntry(section, entry.id, { subtitle: e.target.value })}
+                                                            />
+                                                        </label>
+                                                        <label>
+                                                            Location
+                                                            <input
+                                                                value={entry.location || ""}
+                                                                onChange={(e) => updateResumeEntry(section, entry.id, { location: e.target.value })}
+                                                            />
+                                                        </label>
+                                                        <label>
+                                                            Dates
+                                                            <input
+                                                                value={entry.period || ""}
+                                                                onChange={(e) => updateResumeEntry(section, entry.id, { period: e.target.value })}
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                    <label>
+                                                        Highlights
+                                                        <textarea
+                                                            rows={3}
+                                                            value={entry.details || ""}
+                                                            onChange={(e) => updateResumeEntry(section, entry.id, { details: e.target.value })}
+                                                            placeholder="One bullet or detail per line"
+                                                        />
+                                                    </label>
+                                                </article>
+                                            ))}
+                                            {!activeResumeData.sections[section]?.length && (
+                                                <p className="column-empty">No {SECTION_LABELS[section].toLowerCase()} entries yet.</p>
+                                            )}
+                                        </section>
+                                    ))}
                                     <span className="editor-caption">
-                                        <Check size={14} /> {resumeError ? "Saved for this session" : "Saved in this browser"}
+                                        <Check size={14} />{" "}
+                                        {resumeError ? "Saved for this session" : "Saved in this browser and synced when backend accepts the update"}
                                     </span>
                                 </section>
+                                <aside className="resume-preview-panel">
+                                    <h2>Formatted preview</h2>
+                                    <div className="resume-template-preview">
+                                        <h3>{(activeResumeData.contact.fullName || "Your Name").toUpperCase()}</h3>
+                                        <p>
+                                            {[
+                                                activeResumeData.contact.location,
+                                                activeResumeData.contact.phone,
+                                                activeResumeData.contact.email,
+                                                activeResumeData.contact.website,
+                                                activeResumeData.contact.linkedin,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" | ")}
+                                        </p>
+                                        {RESUME_SECTIONS.map((section) => {
+                                            const entries = (activeResumeData.sections[section] || []).filter(
+                                                (entry) => entry.visible !== false && [entry.title, entry.subtitle, entry.details].some(Boolean),
+                                            );
+                                            if (!entries.length) return null;
+                                            return (
+                                                <section key={section}>
+                                                    <h4>{SECTION_LABELS[section]}</h4>
+                                                    {entries.map((entry) => (
+                                                        <div className="resume-template-entry" key={entry.id}>
+                                                            <div>
+                                                                <strong>{entry.title}</strong>
+                                                                <span>{[entry.location, entry.period].filter(Boolean).join(" · ")}</span>
+                                                            </div>
+                                                            {entry.subtitle && <em>{entry.subtitle}</em>}
+                                                            <ul>
+                                                                {String(entry.details || "")
+                                                                    .split("\n")
+                                                                    .filter(Boolean)
+                                                                    .map((line, index) => (
+                                                                        <li key={index}>{line.replace(/^[-•*]\s*/, "")}</li>
+                                                                    ))}
+                                                            </ul>
+                                                        </div>
+                                                    ))}
+                                                </section>
+                                            );
+                                        })}
+                                    </div>
+                                </aside>
                             </div>
                         </div>
                     )}
@@ -1228,31 +1655,40 @@ function App({ auth, user, onLogout }) {
                         <form
                             onSubmit={async (e) => {
                                 e.preventDefault();
-                                const name = new FormData(e.target).get("name");
+                                const form = new FormData(e.target);
+                                const jobId = form.get("jobId");
+                                const selectedJob = jobs.find((job) => String(job.id) === String(jobId));
+                                const name = form.get("name") || (selectedJob ? `${selectedJob.company} — ${selectedJob.title}` : "Tailored resume");
                                 try {
-                                    const created = await apiRequest("/api/resumes/", auth.access, {
-                                        method: "POST",
-                                        body: JSON.stringify({
-                                            name,
-                                            content: resumes.find((r) => r.master).content,
-                                            master: false,
-                                        }),
-                                    });
-                                    setResumes([...resumes, created]);
-                                    setResumeId(created.id);
-                                    setModal(null);
+                                    await createTailoredResume(name, jobId);
                                 } catch (error) {
                                     setNotice(`Could not create resume: ${error.message}`);
                                 }
                             }}
                         >
-                            <p>Create an editable copy of your master resume for a specific role.</p>
+                            <p>
+                                Create an editable copy of your master resume for a specific role. Hide or show entries depending on the job without changing
+                                your master.
+                            </p>
+                            <label>
+                                Job this resume is for
+                                <select name="jobId" required defaultValue="">
+                                    <option value="" disabled>
+                                        Choose a job
+                                    </option>
+                                    {jobs.map((job) => (
+                                        <option key={job.id} value={job.id}>
+                                            {job.company} — {job.title}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
                             <label>
                                 Resume name
-                                <input name="name" placeholder="e.g. Delulu Labs — Frontend Vibe Engineer" required maxLength={120} />
+                                <input name="name" placeholder="e.g. Shopify — Backend Developer" maxLength={120} />
                             </label>
                             <button className="primary" type="submit">
-                                Create tailored copy <ArrowRight size={16} />
+                                Create custom resume <ArrowRight size={16} />
                             </button>
                         </form>
                     )}
