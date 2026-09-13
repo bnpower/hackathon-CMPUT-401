@@ -1,12 +1,54 @@
 from pathlib import Path
+from xml.etree import ElementTree
+from zipfile import BadZipFile, ZipFile
 
+from pypdf import PdfReader
 from rest_framework import serializers
 
 from .models import Application, Communication, ResumeDocument, SavedJob, TextResume
 
 MASTER_RESUME_CONTENT = "YOUR NAME\nEmail · Phone · Portfolio\n\nABOUT ME\nWrite a short introduction about your interests and experience.\n\nEXPERIENCE\nRole · Company · Dates\n• Describe your contribution and its impact.\n\nEDUCATION\nDegree · University · Graduation year\n\nSKILLS\nAdd your relevant skills."
 MAX_RESUME_BYTES = 10 * 1024 * 1024
-ALLOWED_EXTENSIONS = {"pdf", "docx", "png", "jpg", "jpeg"}
+ALLOWED_EXTENSIONS = {"pdf", "docx"}
+
+
+def extract_docx_text(file):
+    file.seek(0)
+    try:
+        with ZipFile(file) as archive:
+            xml = archive.read("word/document.xml")
+    except (BadZipFile, KeyError):
+        file.seek(0)
+        return ""
+
+    root = ElementTree.fromstring(xml)
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    lines = []
+    for paragraph in root.iter(f"{namespace}p"):
+        parts = [node.text for node in paragraph.iter(f"{namespace}t") if node.text]
+        line = "".join(parts).strip()
+        if line:
+            lines.append(line)
+    file.seek(0)
+    return "\n".join(lines)
+
+
+def extract_pdf_text(file):
+    file.seek(0)
+    try:
+        reader = PdfReader(file)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    finally:
+        file.seek(0)
+    return text.strip()
+
+
+def extract_resume_text(file, extension):
+    if extension == "pdf":
+        return extract_pdf_text(file)
+    if extension == "docx":
+        return extract_docx_text(file)
+    return ""
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -71,7 +113,7 @@ class TextResumeSerializer(serializers.ModelSerializer):
                 existing = existing.exclude(pk=self.instance.pk)
             if existing.exists():
                 raise serializers.ValidationError(
-                    {"master": "Only one master resume is allowed."}
+                    {"master": "Only one main resume is allowed."}
                 )
         return attrs
 
@@ -83,6 +125,7 @@ class TextResumeSerializer(serializers.ModelSerializer):
 class ResumeDocumentSerializer(serializers.ModelSerializer):
     addedAt = serializers.DateTimeField(source="created_at", read_only=True)
     downloadUrl = serializers.SerializerMethodField()
+    extractedText = serializers.SerializerMethodField()
 
     class Meta:
         model = ResumeDocument
@@ -94,6 +137,7 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
             "content_type",
             "addedAt",
             "downloadUrl",
+            "extractedText",
             "file",
         )
         read_only_fields = (
@@ -104,6 +148,7 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
             "content_type",
             "addedAt",
             "downloadUrl",
+            "extractedText",
         )
         extra_kwargs = {"file": {"write_only": True}}
 
@@ -115,9 +160,7 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
     def validate_file(self, file):
         extension = Path(file.name).suffix.lower().lstrip(".")
         if extension not in ALLOWED_EXTENSIONS:
-            raise serializers.ValidationError(
-                "Choose a PDF, DOCX, PNG, JPG, or JPEG file."
-            )
+            raise serializers.ValidationError("Choose a PDF or DOCX resume.")
         if file.size == 0:
             raise serializers.ValidationError(
                 "That file is empty. Choose another resume."
@@ -135,20 +178,16 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "That file does not appear to be a DOCX document."
             )
-        if extension == "png" and not header.startswith(b"\x89PNG\r\n\x1a\n"):
-            raise serializers.ValidationError(
-                "That file does not appear to be a PNG image."
-            )
-        if extension in {"jpg", "jpeg"} and not header.startswith(b"\xff\xd8\xff"):
-            raise serializers.ValidationError(
-                "That file does not appear to be a JPEG image."
-            )
         return file
+
+    def get_extractedText(self, obj):
+        return getattr(obj, "extracted_text", "")
 
     def create(self, validated_data):
         file = validated_data["file"]
         extension = Path(file.name).suffix.lower().lstrip(".")
-        return ResumeDocument.objects.create(
+        extracted_text = extract_resume_text(file, extension)
+        document = ResumeDocument.objects.create(
             user=self.context["request"].user,
             file=file,
             name=file.name,
@@ -156,6 +195,8 @@ class ResumeDocumentSerializer(serializers.ModelSerializer):
             size=file.size,
             content_type=getattr(file, "content_type", "") or "",
         )
+        document.extracted_text = extracted_text
+        return document
 
 
 class CommunicationSerializer(serializers.ModelSerializer):

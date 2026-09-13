@@ -38,16 +38,12 @@ export const removeResumeFile = (id) => transact("readwrite", (store) => store.d
 
 export async function storeResumeFile(file) {
     const extension = file.name.split(".").pop().toLowerCase();
-    if (!["pdf", "docx", "png", "jpg", "jpeg"].includes(extension)) throw new Error("Choose a PDF, DOCX, PNG, JPG, or JPEG file.");
+    if (!["pdf", "docx"].includes(extension)) throw new Error("Choose a PDF or DOCX resume.");
     if (!file.size) throw new Error("That file is empty. Choose another resume.");
     if (file.size > MAX_RESUME_BYTES) throw new Error("That file is too large. The limit is 10 MB.");
     const bytes = new Uint8Array(await file.arrayBuffer());
     const header = new TextDecoder().decode(bytes.slice(0, 5));
     if (extension === "pdf" && header !== "%PDF-") throw new Error("That file does not appear to be a PDF.");
-    if (extension === "png" && !(bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47))
-        throw new Error("That file does not appear to be a PNG image.");
-    if (["jpg", "jpeg"].includes(extension) && !(bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff))
-        throw new Error("That file does not appear to be a JPEG image.");
     if (extension === "docx") {
         const zipDirectory = new TextDecoder("latin1").decode(bytes);
         if (
@@ -68,14 +64,7 @@ export async function storeResumeFile(file) {
         extension,
         addedAt: new Date().toISOString(),
         blob: new Blob([bytes], {
-            type:
-                extension === "pdf"
-                    ? "application/pdf"
-                    : extension === "docx"
-                      ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      : extension === "png"
-                        ? "image/png"
-                        : "image/jpeg",
+            type: extension === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         }),
     };
     await transact("readwrite", (store) => store.put(record));

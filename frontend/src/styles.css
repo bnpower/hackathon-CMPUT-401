@@ -319,6 +319,10 @@ nav {
 }
 .workspace {
     margin-left: 246px;
+    transition: margin-right 0.4s ease;
+}
+.app.brainrot-open .workspace {
+    margin-right: 34vw;
 }
 .topbar {
     height: 77px;
@@ -820,6 +824,8 @@ footer {
     border-radius: 10px;
     padding: 14px;
     min-height: 340px;
+    display: flex;
+    flex-direction: column;
 }
 .board-column h2 {
     display: flex;
@@ -876,43 +882,46 @@ footer {
     width: 100%;
 }
 .application-card-handle {
-  cursor: grab;
-  touch-action: none;
-  margin: -2px -2px 0;
-  padding: 2px;
-  border-radius: 6px;
+    cursor: grab;
+    touch-action: none;
+    margin: -2px -2px 0;
+    padding: 2px;
+    border-radius: 6px;
 }
 .application-card-handle:hover {
-  background: #fbf0f3;
+    background: #fbf0f3;
 }
 .application-card-handle:active {
-  cursor: grabbing;
+    cursor: grabbing;
 }
 .application-card-handle:focus-visible {
-  outline: 3px solid #883853;
-  outline-offset: 3px;
+    outline: 3px solid #883853;
+    outline-offset: 3px;
 }
 .application-card-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 .drag-icon {
-  color: #c98ea0;
-  flex-shrink: 0;
+    color: #c98ea0;
+    flex-shrink: 0;
 }
 .board-column.is-drop-target {
-  outline: 2px dashed #a11636;
-  outline-offset: -4px;
+    outline: 2px dashed #a11636;
+    outline-offset: -4px;
 }
 .drag-overlay-card {
-  cursor: grabbing;
-  box-shadow: 0 10px 24px rgba(65, 27, 40, 0.25);
+    cursor: grabbing;
+    box-shadow: 0 10px 24px rgba(65, 27, 40, 0.25);
 }
 .column-empty {
     font-size: 11px;
     text-align: center;
     margin-top: 35px;
+    flex: 1;
+    display: grid;
+    place-items: center;
 }
 .resume-layout {
     display: grid;
@@ -1289,6 +1298,9 @@ form textarea {
     .workspace {
         margin-left: 205px;
     }
+    .app.brainrot-open .workspace {
+        margin-right: 34vw;
+    }
     main {
         padding: 30px 25px;
     }
@@ -1355,6 +1367,9 @@ form textarea {
     }
     .workspace {
         margin-left: 78px;
+    }
+    .app.brainrot-open .workspace {
+        margin-right: 0;
     }
     .page-heading {
         align-items: flex-start;
@@ -1453,6 +1468,9 @@ form textarea {
     .workspace {
         margin-left: 0;
         padding-bottom: 66px;
+    }
+    .app.brainrot-open .workspace {
+        margin-right: 0;
     }
     .topbar {
         height: 58px;
@@ -1945,4 +1963,28 @@ form textarea {
         flex-direction: column;
         align-items: flex-start;
     }
+}
+
+.skill-toggle-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+.skill-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid #efc9d2;
+    border-radius: 999px;
+    background: #fff;
+    color: #63293c;
+    padding: 6px 10px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.skill-toggle.is-hidden {
+    opacity: 0.58;
+    text-decoration: line-through;
+    background: #fbf0f3;
 }

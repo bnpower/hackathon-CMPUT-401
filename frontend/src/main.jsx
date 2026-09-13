@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
     ArrowUpRight,
@@ -23,7 +23,6 @@ import {
     ChevronsRight,
     GripVertical,
     LogOut,
-    Upload,
     Eye,
     EyeOff,
     Trash2,
@@ -34,7 +33,7 @@ import { CSS } from "@dnd-kit/utilities";
 import "./styles.css";
 import "./personality.css";
 import ResumeUploads from "./ResumeUploads";
-import { importResumeFile, RESUME_IMPORT_LIMITATIONS } from "./resumeImport";
+import { parseResumeText, RESUME_IMPORT_LIMITATIONS } from "./resumeImport";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const AUTH_STORAGE_KEY = "hire-power-auth";
@@ -105,6 +104,15 @@ function isConfiguredOAuthClientId(clientId, provider) {
     );
 }
 
+class ApiError extends Error {
+    constructor(message, response, data) {
+        super(message);
+        this.name = "ApiError";
+        this.status = response?.status;
+        this.data = data;
+    }
+}
+
 async function requestJson(path, options = {}) {
     const response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
@@ -116,19 +124,45 @@ async function requestJson(path, options = {}) {
     const text = await response.text();
     const data = text ? JSON.parse(text) : null;
     if (!response.ok) {
-        throw new Error(data?.detail || Object.values(data || {})?.flat?.()?.[0] || "Request failed");
+        throw new ApiError(data?.detail || Object.values(data || {})?.flat?.()?.[0] || "Request failed", response, data);
     }
     return data;
 }
 
-function apiRequest(path, accessToken, options = {}) {
-    return requestJson(path, {
-        ...options,
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            ...(options.headers || {}),
-        },
-    });
+async function apiRequest(path, accessToken, options = {}) {
+    async function send(token) {
+        return requestJson(path, {
+            ...options,
+            headers: {
+                Authorization: `Bearer ${token}`,
+                ...(options.headers || {}),
+            },
+        });
+    }
+
+    try {
+        return await send(accessToken);
+    } catch (error) {
+        const stored = getStoredAuth();
+        if (error.status !== 401 || !stored?.refresh || options.skipRefresh) {
+            throw error;
+        }
+
+        try {
+            const refreshed = await requestJson("/api/auth/refresh/", {
+                method: "POST",
+                body: JSON.stringify({ refresh: stored.refresh }),
+            });
+            const nextAuth = { ...stored, access: refreshed.access };
+            storeAuth(nextAuth);
+            window.dispatchEvent(new CustomEvent("hire-power-auth-updated", { detail: nextAuth }));
+            return await send(refreshed.access);
+        } catch {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            window.dispatchEvent(new CustomEvent("hire-power-auth-expired"));
+            throw new Error("Your session expired. Please sign in again.");
+        }
+    }
 }
 
 function storeAuth(auth) {
@@ -223,14 +257,44 @@ function resumeEnvelope(resume) {
     return { version: 1, meta: {}, data: plainTextToResumeData(resume?.content || "") };
 }
 
+function normalizeSkillName(skill) {
+    return String(skill || "")
+        .trim()
+        .replace(/^[-•*]\s*/, "")
+        .toLowerCase();
+}
+
+function skillItemsFromDetails(details = "") {
+    return String(details || "")
+        .split(/\n|,/)
+        .map((skill) => skill.replace(/^[-•*]\s*/, "").trim())
+        .filter(Boolean);
+}
+
+function visibleSkillItems(entry) {
+    const hidden = new Set((entry.hiddenSkills || []).map(normalizeSkillName));
+    return skillItemsFromDetails(entry.details).filter((skill) => !hidden.has(normalizeSkillName(skill)));
+}
+
+function resumeEntryHasVisibleContent(section, entry) {
+    if (entry.visible === false) return false;
+    if (section === "skills") return visibleSkillItems(entry).length > 0;
+    return [entry.title, entry.subtitle, entry.details].some(Boolean);
+}
+
 function resumeDataToFormattedText(data) {
     const contact = [data.contact.location, data.contact.phone, data.contact.email, data.contact.website, data.contact.linkedin].filter(Boolean).join(" | ");
     const parts = [(data.contact.fullName || "Your Name").toUpperCase(), contact, ""];
     RESUME_SECTIONS.forEach((section) => {
-        const entries = (data.sections[section] || []).filter((entry) => entry.visible !== false && [entry.title, entry.subtitle, entry.details].some(Boolean));
+        const entries = (data.sections[section] || []).filter((entry) => resumeEntryHasVisibleContent(section, entry));
         if (!entries.length) return;
         parts.push(SECTION_LABELS[section].toUpperCase());
         entries.forEach((entry) => {
+            if (section === "skills") {
+                const skills = visibleSkillItems(entry);
+                if (skills.length) parts.push(`${entry.title || "Skills"}: ${skills.join(", ")}`);
+                return;
+            }
             parts.push([entry.title, entry.subtitle, entry.location, entry.period].filter(Boolean).join(" | "));
             String(entry.details || "")
                 .split("\n")
@@ -471,6 +535,23 @@ function AuthShell() {
         completeOAuth();
     }, []);
 
+    useEffect(() => {
+        function handleAuthUpdated(event) {
+            setAuth(event.detail);
+            setAuthError("");
+        }
+        function handleAuthExpired() {
+            setAuth(null);
+            setAuthError("Your session expired. Please sign in again.");
+        }
+        window.addEventListener("hire-power-auth-updated", handleAuthUpdated);
+        window.addEventListener("hire-power-auth-expired", handleAuthExpired);
+        return () => {
+            window.removeEventListener("hire-power-auth-updated", handleAuthUpdated);
+            window.removeEventListener("hire-power-auth-expired", handleAuthExpired);
+        };
+    }, []);
+
     async function handleEmailAuth(formData, mode) {
         const payload = Object.fromEntries(formData);
         const path = mode === "register" ? "/api/auth/register/" : "/api/auth/login/";
@@ -654,7 +735,7 @@ function App({ auth, user, onLogout }) {
         [resumes, setResumes, resumeError] = useSaved("sprout-resumes", [
             {
                 id: 1,
-                name: "My master resume",
+                name: "My main resume",
                 content: makeResumePayload(STARTER_RESUME_DATA, { source: "starter" }),
                 master: true,
             },
@@ -667,7 +748,6 @@ function App({ auth, user, onLogout }) {
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
     );
     const [remoteError, setRemoteError] = useState("");
-    const resumeImportInput = useRef(null);
 
     useEffect(() => {
         let active = true;
@@ -714,8 +794,7 @@ function App({ auth, user, onLogout }) {
         } else {
             next.push(moved);
         }
-        setApplications(next);
-        updateApplication(active.id, { status: targetStatus });
+        updateApplication(active.id, { status: targetStatus }, next);
     }
     const filtered = jobs.filter(
         (j) =>
@@ -785,15 +864,15 @@ function App({ auth, user, onLogout }) {
             setNotice(`Could not update saved jobs: ${error.message}`);
         }
     }
-    async function updateApplication(id, patch) {
+    async function updateApplication(id, patch, optimisticApplications = applications) {
         const previous = applications;
-        setApplications(applications.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+        setApplications(optimisticApplications.map((item) => (item.id === id ? { ...item, ...patch } : item)));
         try {
             const updated = await apiRequest(`/api/applications/${id}/`, auth.access, {
                 method: "PATCH",
                 body: JSON.stringify(patch),
             });
-            setApplications(previous.map((item) => (item.id === id ? updated : item)));
+            setApplications((current) => current.map((item) => (item.id === id ? { ...item, ...updated } : item)));
         } catch (error) {
             setApplications(previous);
             setNotice(`Could not update application: ${error.message}`);
@@ -815,7 +894,7 @@ function App({ auth, user, onLogout }) {
     }
     async function deleteTextResume(resume) {
         if (resume.master) {
-            setNotice("The master resume is required as your base template, so it cannot be deleted. You can rename and edit it instead.");
+            setNotice("The main resume is required as your base template, so it cannot be deleted. You can rename and edit it instead.");
             return;
         }
         if (!window.confirm(`Delete ${resume.name}? This custom resume cannot be recovered.`)) return;
@@ -832,25 +911,56 @@ function App({ auth, user, onLogout }) {
             setNotice(`Could not delete resume: ${error.message}`);
         }
     }
-    async function importTextResume(event) {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (!file) return;
+    function resumeNameFromFile(fileName) {
+        return fileName.replace(/\.(pdf|docx?)$/i, "").trim() || "Imported resume";
+    }
+    async function createResumeFromUpload(file, extractedText = "", options = {}) {
+        if (!extractedText.trim()) {
+            return { created: false, message: "No readable text was found, so no editable library entry was created." };
+        }
         try {
-            const imported = await importResumeFile(file);
+            const imported = parseResumeText(extractedText);
+            const content = makeResumePayload(imported.data, { source: "upload", originalFileName: file.name });
+
+            if (options.replaceMain) {
+                const master = resumes.find((resume) => resume.master);
+                if (master) {
+                    const updated = await apiRequest(`/api/resumes/${master.id}/`, auth.access, {
+                        method: "PATCH",
+                        body: JSON.stringify({ content }),
+                    });
+                    setResumes((current) => current.map((resume) => (resume.id === master.id ? updated : resume)));
+                    setResumeId(updated.id);
+                } else {
+                    const created = await apiRequest("/api/resumes/", auth.access, {
+                        method: "POST",
+                        body: JSON.stringify({
+                            name: "My main resume",
+                            content,
+                            master: true,
+                        }),
+                    });
+                    setResumes((current) => [created, ...current]);
+                    setResumeId(created.id);
+                }
+                setNotice(imported.warnings.join(" "));
+                return { created: true, action: "replaced-main" };
+            }
+
             const created = await apiRequest("/api/resumes/", auth.access, {
                 method: "POST",
                 body: JSON.stringify({
-                    name: file.name.replace(/\.(txt|png|jpe?g)$/i, "") || "Imported resume",
-                    content: makeResumePayload(imported.data, { source: "import", originalFileName: file.name }),
+                    name: resumeNameFromFile(file.name),
+                    content,
                     master: false,
                 }),
             });
-            setResumes([...resumes, created]);
+            setResumes((current) => [...current, created]);
             setResumeId(created.id);
             setNotice(imported.warnings.join(" "));
+            return { created: true, action: "added-entry" };
         } catch (error) {
-            setNotice(`Could not import resume: ${error.message}`);
+            return { created: false, message: error.message };
         }
     }
     function updateStructuredResume(resume, nextData, nextMeta = resumeEnvelope(resume).meta) {
@@ -868,6 +978,28 @@ function App({ auth, user, onLogout }) {
             {
                 ...data,
                 sections: { ...data.sections, [section]: data.sections[section].map((entry) => (entry.id === entryId ? { ...entry, ...patch } : entry)) },
+            },
+            envelope.meta,
+        );
+    }
+    function toggleResumeSkill(entryId, skill) {
+        const envelope = resumeEnvelope(activeResume);
+        const data = envelope.data;
+        const key = normalizeSkillName(skill);
+        updateStructuredResume(
+            activeResume,
+            {
+                ...data,
+                sections: {
+                    ...data.sections,
+                    skills: data.sections.skills.map((entry) => {
+                        if (entry.id !== entryId) return entry;
+                        const hidden = new Set((entry.hiddenSkills || []).map(normalizeSkillName));
+                        if (hidden.has(key)) hidden.delete(key);
+                        else hidden.add(key);
+                        return { ...entry, hiddenSkills: Array.from(hidden) };
+                    }),
+                },
             },
             envelope.meta,
         );
@@ -916,7 +1048,7 @@ function App({ auth, user, onLogout }) {
     const activeResumeData = activeEnvelope.data;
     const activeResumeMeta = activeEnvelope.meta;
     return (
-        <div className="app">
+        <div className={`app ${brainrotOpen ? "brainrot-open" : ""}`}>
             <a className="skip" href="#main">
                 Skip to content
             </a>
@@ -1283,24 +1415,14 @@ function App({ auth, user, onLogout }) {
                     )}
                     {tab === "Resumes" && (
                         <div>
-                            <ResumeUploads accessToken={auth.access} apiBaseUrl={API_BASE_URL} />
+                            <ResumeUploads accessToken={auth.access} apiBaseUrl={API_BASE_URL} onCreateResume={createResumeFromUpload} />
                             <div className="resume-layout structured-resume-layout">
                                 <section className="resume-list">
                                     <div className="resume-list-heading">
                                         <div>
                                             <h2>Resume library</h2>
-                                            <p>Start with your master resume, then tailor custom copies for specific jobs.</p>
+                                            <p>Start with your main resume, then upload a PDF or DOCX to create an editable entry.</p>
                                         </div>
-                                        <button className="secondary" type="button" onClick={() => resumeImportInput.current?.click()}>
-                                            <Upload size={15} /> Import resume
-                                        </button>
-                                        <input
-                                            ref={resumeImportInput}
-                                            type="file"
-                                            accept=".txt,text/plain,.png,.jpg,.jpeg,image/png,image/jpeg"
-                                            onChange={importTextResume}
-                                            hidden
-                                        />
                                     </div>
                                     {resumes.map((r) => {
                                         const envelope = resumeEnvelope(r);
@@ -1314,7 +1436,7 @@ function App({ auth, user, onLogout }) {
                                                 >
                                                     <FileText size={20} />
                                                     <span>
-                                                        <strong>{r.master ? "Master" : "Custom"}</strong>
+                                                        <strong>{r.master ? "Main" : "Custom"}</strong>
                                                         <small>
                                                             {r.master
                                                                 ? "Base resume"
@@ -1332,7 +1454,7 @@ function App({ auth, user, onLogout }) {
                                                     className="text-button danger resume-delete-button"
                                                     type="button"
                                                     disabled={r.master}
-                                                    title={r.master ? "The master resume cannot be deleted." : "Delete custom resume"}
+                                                    title={r.master ? "The main resume cannot be deleted." : "Delete custom resume"}
                                                     onClick={() => deleteTextResume(r)}
                                                 >
                                                     <Trash2 size={14} /> Delete
@@ -1365,7 +1487,7 @@ function App({ auth, user, onLogout }) {
                                                 />
                                             </label>
                                             {activeResume.master ? (
-                                                <p>Master resume used as the foundation for applications.</p>
+                                                <p>Main resume used as the foundation for applications.</p>
                                             ) : (
                                                 <p>
                                                     Custom resume tied to {activeResumeMeta.company || "a specific job"}{" "}
@@ -1462,14 +1584,39 @@ function App({ auth, user, onLogout }) {
                                                         </label>
                                                     </div>
                                                     <label>
-                                                        Highlights
+                                                        {section === "skills" ? "Skills" : "Highlights"}
                                                         <textarea
                                                             rows={3}
                                                             value={entry.details || ""}
                                                             onChange={(e) => updateResumeEntry(section, entry.id, { details: e.target.value })}
-                                                            placeholder="One bullet or detail per line"
+                                                            placeholder={
+                                                                section === "skills"
+                                                                    ? "Separate skills with commas or new lines"
+                                                                    : "One bullet or detail per line"
+                                                            }
                                                         />
                                                     </label>
+                                                    {section === "skills" && skillItemsFromDetails(entry.details).length > 0 && (
+                                                        <div className="skill-toggle-list" aria-label={`Visible skills for ${entry.title || "skill group"}`}>
+                                                            {skillItemsFromDetails(entry.details).map((skill) => {
+                                                                const hidden = (entry.hiddenSkills || [])
+                                                                    .map(normalizeSkillName)
+                                                                    .includes(normalizeSkillName(skill));
+                                                                return (
+                                                                    <button
+                                                                        key={skill}
+                                                                        type="button"
+                                                                        className={`skill-toggle ${hidden ? "is-hidden" : ""}`}
+                                                                        onClick={() => toggleResumeSkill(entry.id, skill)}
+                                                                        aria-pressed={!hidden}
+                                                                    >
+                                                                        {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                                        {skill}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
                                                 </article>
                                             ))}
                                             {!activeResumeData.sections[section]?.length && (
@@ -1498,30 +1645,37 @@ function App({ auth, user, onLogout }) {
                                                 .join(" | ")}
                                         </p>
                                         {RESUME_SECTIONS.map((section) => {
-                                            const entries = (activeResumeData.sections[section] || []).filter(
-                                                (entry) => entry.visible !== false && [entry.title, entry.subtitle, entry.details].some(Boolean),
+                                            const entries = (activeResumeData.sections[section] || []).filter((entry) =>
+                                                resumeEntryHasVisibleContent(section, entry),
                                             );
                                             if (!entries.length) return null;
                                             return (
                                                 <section key={section}>
                                                     <h4>{SECTION_LABELS[section]}</h4>
-                                                    {entries.map((entry) => (
-                                                        <div className="resume-template-entry" key={entry.id}>
-                                                            <div>
-                                                                <strong>{entry.title}</strong>
-                                                                <span>{[entry.location, entry.period].filter(Boolean).join(" · ")}</span>
+                                                    {entries.map((entry) => {
+                                                        const visibleSkills = section === "skills" ? visibleSkillItems(entry) : [];
+                                                        return (
+                                                            <div className="resume-template-entry" key={entry.id}>
+                                                                <div>
+                                                                    <strong>{entry.title}</strong>
+                                                                    <span>{[entry.location, entry.period].filter(Boolean).join(" · ")}</span>
+                                                                </div>
+                                                                {entry.subtitle && <em>{entry.subtitle}</em>}
+                                                                {section === "skills" ? (
+                                                                    visibleSkills.length > 0 && <p>{visibleSkills.join(", ")}</p>
+                                                                ) : (
+                                                                    <ul>
+                                                                        {String(entry.details || "")
+                                                                            .split("\n")
+                                                                            .filter(Boolean)
+                                                                            .map((line, index) => (
+                                                                                <li key={index}>{line.replace(/^[-•*]\s*/, "")}</li>
+                                                                            ))}
+                                                                    </ul>
+                                                                )}
                                                             </div>
-                                                            {entry.subtitle && <em>{entry.subtitle}</em>}
-                                                            <ul>
-                                                                {String(entry.details || "")
-                                                                    .split("\n")
-                                                                    .filter(Boolean)
-                                                                    .map((line, index) => (
-                                                                        <li key={index}>{line.replace(/^[-•*]\s*/, "")}</li>
-                                                                    ))}
-                                                            </ul>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </section>
                                             );
                                         })}
@@ -1671,8 +1825,8 @@ function App({ auth, user, onLogout }) {
                             }}
                         >
                             <p>
-                                Create an editable copy of your master resume for a specific role. Hide or show entries depending on the job without changing
-                                your master.
+                                Create an editable copy of your main resume for a specific role. Hide or show entries depending on the job without changing your
+                                main resume.
                             </p>
                             <label>
                                 Job this resume is for

@@ -6,9 +6,9 @@ from rest_framework.response import Response
 
 from .models import Application, Communication, ResumeDocument, SavedJob, TextResume
 from .serializers import (
+    MASTER_RESUME_CONTENT,
     ApplicationSerializer,
     CommunicationSerializer,
-    MASTER_RESUME_CONTENT,
     ResumeDocumentSerializer,
     SavedJobSerializer,
     TextResumeSerializer,
@@ -30,7 +30,9 @@ class SavedJobViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return SavedJob.objects.filter(user=self.request.user)
 
-    @decorators.action(detail=False, methods=["delete"], url_path=r"by-job/(?P<job_id>[^/.]+)")
+    @decorators.action(
+        detail=False, methods=["delete"], url_path=r"by-job/(?P<job_id>[^/.]+)"
+    )
     def delete_by_job(self, request, job_id=None):
         deleted, _ = self.get_queryset().filter(job_id=job_id).delete()
         return Response({"deleted": deleted})
@@ -52,7 +54,7 @@ class TextResumeViewSet(viewsets.ModelViewSet):
         if not TextResume.objects.filter(user=user, master=True).exists():
             TextResume.objects.create(
                 user=user,
-                name="My master resume",
+                name="My main resume",
                 content=MASTER_RESUME_CONTENT,
                 master=True,
             )
@@ -74,7 +76,9 @@ class ResumeDocumentViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=True, methods=["get"])
     def download(self, request, pk=None):
         document = self.get_object()
-        return FileResponse(document.file.open("rb"), as_attachment=True, filename=document.name)
+        return FileResponse(
+            document.file.open("rb"), as_attachment=True, filename=document.name
+        )
 
     @transaction.atomic
     def perform_destroy(self, instance):

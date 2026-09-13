@@ -8,10 +8,11 @@ function fileError(data) {
     return typeof message === "string" ? message : "Could not save this resume. Please try again.";
 }
 
-export default function ResumeUploads({ accessToken, apiBaseUrl }) {
+export default function ResumeUploads({ accessToken, apiBaseUrl, onCreateResume }) {
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
+    const [replaceMain, setReplaceMain] = useState(false);
     const [error, setError] = useState("");
     const [status, setStatus] = useState("");
     const input = useRef(null);
@@ -52,7 +53,7 @@ export default function ResumeUploads({ accessToken, apiBaseUrl }) {
         try {
             const extension = file.name.split(".").pop().toLowerCase();
             if (!file.size) throw new Error("That file is empty. Choose another resume.");
-            if (!["pdf", "docx", "png", "jpg", "jpeg"].includes(extension)) throw new Error("Choose a PDF, DOCX, PNG, JPG, or JPEG file.");
+            if (!["pdf", "docx"].includes(extension)) throw new Error("Choose a PDF or DOCX resume.");
             if (file.size > MAX_RESUME_BYTES) throw new Error("That file is too large. The limit is 10 MB.");
             const form = new FormData();
             form.append("file", file);
@@ -64,7 +65,16 @@ export default function ResumeUploads({ accessToken, apiBaseUrl }) {
             const record = await response.json();
             if (!response.ok) throw new Error(fileError(record));
             setFiles((previous) => [record, ...previous]);
-            setStatus(`${file.name} saved to your account.`);
+            let message = `${file.name} saved to your account.`;
+            if (onCreateResume) {
+                const result = await onCreateResume(file, record.extractedText || "", { replaceMain });
+                message = result?.created
+                    ? result.action === "replaced-main"
+                        ? `${file.name} saved and used to replace your main resume.`
+                        : `${file.name} saved and added to your resume library.`
+                    : `${message} ${result?.message || "Could not extract readable text for the resume library."}`;
+            }
+            setStatus(message);
         } catch (err) {
             setError(
                 err.name === "QuotaExceededError"
@@ -131,17 +141,21 @@ export default function ResumeUploads({ accessToken, apiBaseUrl }) {
                 <input
                     ref={input}
                     type="file"
-                    aria-label="Upload PDF, DOCX, PNG, or JPEG resume"
-                    accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
+                    aria-label="Upload PDF or DOCX resume"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     onChange={upload}
                     hidden
                     disabled={busy || loading}
                 />
             </div>
             <p>
-                PDF, DOCX, PNG, or JPEG, up to 10 MB. Original files are saved to your account and can be downloaded again. Edit them in your document app; the
-                text editor below stays separate.
+                PDF or DOCX, up to 10 MB. Original files are saved to your account and can be downloaded again. The same upload also creates an editable resume
+                entry in your library when text can be extracted.
             </p>
+            <label className="upload-option">
+                <input type="checkbox" checked={replaceMain} onChange={(e) => setReplaceMain(e.target.checked)} disabled={busy || loading} />
+                Replace my main resume instead of adding a new library entry
+            </label>
             {error && (
                 <p className="upload-error" role="alert">
                     {error}

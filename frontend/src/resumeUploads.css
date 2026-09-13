@@ -79,3 +79,16 @@
     font-size: 21px;
   }
 }
+
+.upload-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+  color: #63293c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.upload-option input {
+  width: auto;
+}

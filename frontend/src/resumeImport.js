@@ -1,6 +1,6 @@
 export const MAX_RESUME_FILE_SIZE = 2 * 1024 * 1024;
 export const RESUME_IMPORT_LIMITATIONS =
-    "Text and image import uses simple rules, not AI. Use Education, Work Experience, Skills, and Projects headings with one achievement per line. PNG/JPEG import uses your browser's OCR when available. PDF/DOCX extraction requires Django.";
+    "PDF/DOCX extraction uses simple rules, not AI. Use Education, Work Experience, Skills, and Projects headings with one achievement per line for the best editable import.";
 
 const SECTIONS = ["education", "experience", "skills", "projects"];
 const HEADINGS = {
@@ -44,8 +44,23 @@ function looksLikeLocation(value) {
     return (
         /^(remote|hybrid|on-site)$/i.test(value) ||
         /^[\p{L} .’'-]+,\s*[A-Z]{2}$/u.test(value) ||
+        /^[\p{L} .’'-]+,\s*[\p{L} .’'-]+$/u.test(value) ||
         /^[\p{L} .’'-]+,\s*(Canada|Ontario|Alberta|British Columbia|Quebec|Québec)$/iu.test(value)
     );
+}
+function splitTrailingPeriod(value) {
+    const months =
+        "Jan\\.?|January|Feb\\.?|February|Mar\\.?|March|Apr\\.?|April|May|Jun\\.?|June|Jul\\.?|July|Aug\\.?|August|Sep\\.?|Sept\\.?|September|Oct\\.?|October|Nov\\.?|November|Dec\\.?|December";
+    const pattern = new RegExp(`\\b((?:(?:${months})\\s+)?(?:19|20)\\d{2}(?:\\s*[–-]\\s*(?:(?:${months})\\s+)?(?:(?:19|20)\\d{2}|present|current))?)$`, "i");
+    const match = value.match(pattern);
+    if (!match) return { body: value.trim(), period: "" };
+    return { body: value.slice(0, match.index).trim(), period: match[1].trim() };
+}
+function splitTrailingLocation(value) {
+    if (value.includes("|")) return { body: value.trim(), location: "" };
+    const match = value.match(/^(.+)\s+((?:[\p{L} .’'-]+,\s*[\p{L} .’'-]+)|Remote|Hybrid|On-site)$/u);
+    if (!match || !looksLikeLocation(match[2])) return { body: value.trim(), location: "" };
+    return { body: match[1].trim(), location: match[2].trim() };
 }
 function parseContact(lines, contact, unparsedLines) {
     const useful = lines.map((line) => line.trim()).filter(Boolean);
@@ -81,36 +96,67 @@ function addMetadata(entry, text) {
         else entry.title = entry.title || body;
         return;
     }
-    if (!entry.title) entry.title = value;
-    else if (!entry.subtitle && !looksLikePeriod(value) && !looksLikeLocation(value)) entry.subtitle = value;
-    else if (!entry.period && looksLikePeriod(value)) entry.period = value;
-    else if (!entry.location && looksLikeLocation(value)) entry.location = value;
-    else entry.details += `${entry.details ? "\n" : ""}${value}`;
+
+    const periodSplit = splitTrailingPeriod(value);
+    const locationSplit = entry.location ? { body: periodSplit.body, location: "" } : splitTrailingLocation(periodSplit.body);
+    const body = locationSplit.body || periodSplit.body;
+    if (periodSplit.period && !entry.period) entry.period = periodSplit.period;
+    if (locationSplit.location && !entry.location) entry.location = locationSplit.location;
+
+    if (!body) return;
+    if (!entry.title) entry.title = body;
+    else if (!entry.subtitle && !looksLikePeriod(body) && (entry.location || !looksLikeLocation(body))) entry.subtitle = body;
+    else if (!entry.period && looksLikePeriod(body)) entry.period = body;
+    else if (!entry.location && looksLikeLocation(body)) entry.location = body;
+    else entry.details += `${entry.details ? "\n" : ""}${body}`;
 }
-function parseEntries(lines, section) {
+function hasBullet(lines) {
+    return lines.some((line) => BULLET.test(line));
+}
+function isLikelyEntryHeader(line, section) {
+    const value = line.trim();
+    if (!value || BULLET.test(value)) return false;
+    if (HEADINGS[headingKey(value)] || OTHER_HEADINGS.test(headingKey(value))) return false;
+    if (section === "projects") return /\b(?:19|20)\d{2}\b/.test(value) || value.includes("|");
+    if (section === "experience")
+        return /\b(?:19|20)\d{2}\b/.test(value) || /\b(?:intern|engineer|developer|designer|manager|analyst|assistant|coordinator|consultant)\b/i.test(value);
+    return false;
+}
+function splitEntryChunks(lines, section) {
+    const cleaned = lines.map((line) => line.trim()).filter(Boolean);
+    if (!cleaned.length) return [];
+    if (section === "skills") return cleaned.map((line) => [line]);
+
     const chunks = [];
     let current = [];
-    for (const line of lines) {
-        if (!line.trim()) {
-            if (current.length) chunks.push(current);
+    for (const line of cleaned) {
+        const startsNextEntry =
+            current.length > 0 &&
+            !BULLET.test(line) &&
+            ((section === "education" && current.length >= 2) || (hasBullet(current) && isLikelyEntryHeader(line, section)));
+        if (startsNextEntry) {
+            chunks.push(current);
             current = [];
-        } else current.push(line);
+        }
+        current.push(line);
     }
     if (current.length) chunks.push(current);
-    const source = chunks.length ? chunks : [lines.filter((line) => line.trim())];
-    return source
+    return chunks;
+}
+function parseEntries(lines, section) {
+    return splitEntryChunks(lines, section)
         .filter((chunk) => chunk.length)
         .map((chunk) => {
             const entry = emptyEntry();
             if (section === "skills") {
-                entry.title = chunk[0]?.replace(BULLET, "").trim() || "Skills";
-                entry.details = chunk
-                    .slice(chunk.length > 1 ? 1 : 0)
-                    .map((line) => line.replace(BULLET, "").trim())
-                    .filter(Boolean)
-                    .join("\n");
-                if (!entry.details && entry.title !== "Skills") entry.details = entry.title;
-                if (entry.title !== "Skills" && entry.details === entry.title) entry.title = "Skills";
+                const [label, ...rest] = chunk[0].split(":");
+                if (rest.length) {
+                    entry.title = label.trim() || "Skills";
+                    entry.details = rest.join(":").trim();
+                } else {
+                    entry.title = "Skills";
+                    entry.details = chunk[0].replace(BULLET, "").trim();
+                }
                 return entry;
             }
             chunk.forEach((line, index) => {
@@ -122,16 +168,13 @@ function parseEntries(lines, section) {
 }
 
 export function parseResumeText(text) {
-    if (new TextEncoder().encode(text).byteLength > MAX_RESUME_FILE_SIZE) throw new Error("This file is too large. Choose a text resume of 2 MB or less.");
+    if (new TextEncoder().encode(text).byteLength > MAX_RESUME_FILE_SIZE) throw new Error("Extracted resume text is too large to import.");
     const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-    if (!normalized.trim()) throw new Error("This text file is empty. Choose a resume with some text to import.");
-    if (/^\s*(%PDF-|PK\u0003\u0004)/.test(normalized))
-        throw new Error("PDF/DOCX extraction requires Django. Export your resume as plain text (.txt) instead; renaming the file does not convert it.");
-    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(normalized))
-        throw new Error("This does not look like a plain-text resume. Export a UTF-8 .txt file and try again.");
+    if (!normalized.trim()) throw new Error("No readable text was found in this resume.");
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(normalized)) throw new Error("The extracted text could not be imported safely.");
 
     const data = { contact: emptyContact(), sections: { education: [], experience: [], skills: [], projects: [] } };
-    const warnings = ["Best-effort text extraction: check names, dates, section boundaries, and bullet points before saving."];
+    const warnings = ["Best-effort PDF/DOCX extraction: check names, dates, section boundaries, and bullet points before saving."];
     const unparsedLines = [];
     const sectionLines = { education: [], experience: [], skills: [], projects: [] };
     const header = [];
@@ -154,64 +197,4 @@ export function parseResumeText(text) {
     if (!SECTIONS.some((section) => data.sections[section].length)) warnings.push("No supported section headings were found. Add entries manually.");
     if (unparsedLines.length) warnings.push("Some text could not be placed automatically and was left out. Review the original import if needed.");
     return { data, warnings, unparsedLines };
-}
-
-function isImageResume(file) {
-    return /\.(png|jpe?g)$/i.test(file.name) || /^image\/(png|jpe?g)$/i.test(file.type);
-}
-
-async function extractTextFromImage(file) {
-    if (!("TextDetector" in window)) {
-        throw new Error(
-            "PNG/JPEG import needs browser OCR support. Try this in Chrome/Edge with the TextDetector API enabled, or export the resume as a UTF-8 .txt file and import that.",
-        );
-    }
-    if (!("createImageBitmap" in window)) {
-        throw new Error("This browser cannot read resume images for import. Export the resume as a UTF-8 .txt file and try again.");
-    }
-
-    let bitmap;
-    try {
-        bitmap = await createImageBitmap(file);
-        const detector = new window.TextDetector();
-        const detections = await detector.detect(bitmap);
-        const text = detections
-            .map((item) => item.rawValue || "")
-            .filter(Boolean)
-            .join("\n");
-        if (!text.trim()) throw new Error("No readable text was found in this image. Try a sharper PNG/JPEG or import a .txt export instead.");
-        return text;
-    } finally {
-        bitmap?.close?.();
-    }
-}
-
-export async function importResumeFile(file) {
-    if (file.size > MAX_RESUME_FILE_SIZE) throw new Error("This file is too large. Choose a resume file of 2 MB or less.");
-    if (/\.(pdf|docx?|odt)$/i.test(file.name) || /pdf|word|officedocument|opendocument/i.test(file.type)) {
-        throw new Error(
-            "PDF/DOCX extraction requires Django. For now, export your resume as a UTF-8 plain-text (.txt) file and import that. You can also upload original PDF/DOCX files separately.",
-        );
-    }
-
-    let text;
-    if (isImageResume(file)) {
-        text = await extractTextFromImage(file);
-        const parsed = parseResumeText(text);
-        return {
-            ...parsed,
-            warnings: [
-                "Best-effort OCR import: check every field because image text recognition can miss names, dates, bullets, or section boundaries.",
-                ...parsed.warnings,
-            ],
-        };
-    }
-
-    if (!/\.txt$/i.test(file.name)) throw new Error("Choose a .txt, .png, .jpg, or .jpeg file to import into the editor.");
-    try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-    } catch {
-        throw new Error("This file could not be read as UTF-8 text. Re-export it as a UTF-8 .txt file and try again.");
-    }
-    return parseResumeText(text);
 }
