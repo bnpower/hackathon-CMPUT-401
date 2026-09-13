@@ -35,6 +35,34 @@
 .icon-button { min-width: 44px; min-height: 44px; }
 .search input, .filter select, .card-top strong, .job-roast { font-size: 14px; }
 .location, .tags span, .tag, .results-label, .stat > div > span { font-size: 13px; }
+.job-card:nth-child(n) { transform: none; }
+.job-card .tags, .modal .tags { align-items: center; gap: 8px; }
+.job-card .tags span, .modal .tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 10px;
+  font: 600 14px/1.4 Arial, Helvetica, sans-serif;
+  letter-spacing: 0.1px;
+  color: #68243c;
+  background: #f6dce5;
+  border: 1px solid #b96a83;
+  border-radius: 3px;
+}
+.job-sticker { align-items: center; min-height: 39px; padding: 9px 12px; }
+.job-sticker > span:first-child { font: 700 14px/1.35 Arial, Helvetica, sans-serif; color: #59152c; }
+.job-sticker > span:last-child { font-size: 11px; }
+/* Share content rows so wrapped titles and descriptions don't offset the tags. */
+@supports (grid-template-rows: subgrid) {
+  .job-card {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 7;
+    row-gap: 0;
+  }
+  .job-card .tags { align-self: start; }
+  .job-card .card-bottom { margin-top: 0; }
+}
 .reminders-banner { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 90px; padding: 18px 22px; margin: 0 0 28px; text-align: left; color: #59152c; background: #ffc9dc; border: 2px solid #9d294a; border-left-width: 7px; box-shadow: 4px 4px 0 #b5678438; }
 .reminders-banner:hover { background: #ffb6d0; }
 .reminders-banner > svg { flex-shrink: 0; }
