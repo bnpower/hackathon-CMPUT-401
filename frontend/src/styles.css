@@ -916,6 +916,16 @@ footer {
   color: #a8536f;
   margin-top: 5px;
 }
+.resume-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.resume-list-heading h2 {
+  margin: 0;
+}
 .resume-list p {
   font-size: 11px;
   margin-top: 22px;
@@ -1407,5 +1417,107 @@ form textarea {
   }
   .reminder {
     flex-wrap: wrap;
+  }
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 15% 20%, #f6dfe5 0 18%, transparent 19%),
+    radial-gradient(circle at 85% 80%, #f0cad4 0 16%, transparent 17%),
+    #fbf3f5;
+}
+.auth-card {
+  width: min(100%, 510px);
+  background: #ffffff;
+  border: 1px solid #f3d6dd;
+  border-radius: 28px;
+  box-shadow: 0 24px 70px #7a324a1f;
+  padding: 34px;
+  display: grid;
+  gap: 22px;
+}
+.auth-brand {
+  width: fit-content;
+}
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+.auth-form label,
+.auth-card label {
+  display: grid;
+  gap: 7px;
+  color: #572334;
+  font-weight: 700;
+}
+.auth-form input {
+  width: 100%;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #8b928b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #f3d6dd;
+}
+.sso-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.auth-switch {
+  justify-self: center;
+}
+.auth-error {
+  color: #7d263e;
+}
+.auth-status {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #572334;
+  font-weight: 800;
+}
+.profile small {
+  display: block;
+  max-width: 155px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8b928b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile strong {
+  display: block;
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .auth-page {
+    padding: 18px;
+  }
+  .auth-card {
+    padding: 24px;
+  }
+  .sso-actions,
+  .auth-form .form-row {
+    grid-template-columns: 1fr;
   }
 }

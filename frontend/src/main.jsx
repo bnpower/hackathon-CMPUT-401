@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -19,10 +19,61 @@ import {
   Check,
   Bell,
   SlidersHorizontal,
+  LogOut,
+  Upload,
 } from "lucide-react";
 import "./styles.css";
 import "./personality.css";
 import ResumeUploads from "./ResumeUploads";
+import { importResumeFile, RESUME_IMPORT_LIMITATIONS } from "./resumeImport";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+const AUTH_STORAGE_KEY = "hire-power-auth";
+
+async function requestJson(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(
+      data?.detail || Object.values(data || {})?.flat?.()?.[0] || "Request failed",
+    );
+  }
+  return data;
+}
+
+function apiRequest(path, accessToken, options = {}) {
+  return requestJson(path, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(options.headers || {}),
+    },
+  });
+}
+
+function storeAuth(auth) {
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+}
+
+function getStoredAuth() {
+  try {
+    return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function userInitial(user) {
+  return (user?.name || user?.email || "Y").trim().charAt(0).toUpperCase();
+}
 
 const jobLore = {
   1: [
@@ -220,7 +271,218 @@ function useSaved(key, fallback) {
   }
   return [value, save, error];
 }
-function App() {
+function AuthShell() {
+  const [auth, setAuth] = useState(() => getStoredAuth());
+  const [authError, setAuthError] = useState("");
+  const [checkingProvider, setCheckingProvider] = useState(false);
+
+  useEffect(() => {
+    async function completeOAuth() {
+      const url = new URL(window.location.href);
+      const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const googleToken = hash.get("id_token");
+      const linkedinCode = url.searchParams.get("code");
+      const linkedinState = url.searchParams.get("state");
+      const expectedLinkedinState = localStorage.getItem("hire-power-linkedin-state");
+
+      try {
+        if (googleToken) {
+          setCheckingProvider(true);
+          const next = await requestJson("/api/auth/google/", {
+            method: "POST",
+            body: JSON.stringify({ id_token: googleToken }),
+          });
+          storeAuth(next);
+          setAuth(next);
+          window.history.replaceState({}, document.title, url.pathname);
+        } else if (linkedinCode) {
+          if (!expectedLinkedinState || linkedinState !== expectedLinkedinState) {
+            throw new Error("LinkedIn sign-in state did not match. Please try again.");
+          }
+          setCheckingProvider(true);
+          localStorage.removeItem("hire-power-linkedin-state");
+          const next = await requestJson("/api/auth/linkedin/", {
+            method: "POST",
+            body: JSON.stringify({
+              code: linkedinCode,
+              redirect_uri: `${url.origin}${url.pathname}`,
+            }),
+          });
+          storeAuth(next);
+          setAuth(next);
+          window.history.replaceState({}, document.title, url.pathname);
+        }
+      } catch (error) {
+        setAuthError(error.message);
+      } finally {
+        setCheckingProvider(false);
+      }
+    }
+    completeOAuth();
+  }, []);
+
+  async function handleEmailAuth(formData, mode) {
+    const payload = Object.fromEntries(formData);
+    const path = mode === "register" ? "/api/auth/register/" : "/api/auth/login/";
+    const next = await requestJson(path, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    storeAuth(next);
+    setAuth(next);
+  }
+
+  async function logout() {
+    const refresh = auth?.refresh;
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setAuth(null);
+    if (refresh) {
+      try {
+        await requestJson("/api/auth/logout/", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${auth.access}` },
+          body: JSON.stringify({ refresh }),
+        });
+      } catch {
+        // The local session has already been cleared.
+      }
+    }
+  }
+
+  if (checkingProvider) {
+    return <div className="auth-status">Finishing secure sign-in…</div>;
+  }
+
+  if (!auth?.access || !auth?.user) {
+    return <AuthPage onEmailAuth={handleEmailAuth} authError={authError} />;
+  }
+
+  return <App auth={auth} user={auth.user} onLogout={logout} />;
+}
+
+function AuthPage({ onEmailAuth, authError }) {
+  const [mode, setMode] = useState("login");
+  const [error, setError] = useState(authError);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => setError(authError), [authError]);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await onEmailAuth(new FormData(e.currentTarget), mode);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function signInWithGoogle() {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setError("Set VITE_GOOGLE_CLIENT_ID before using Google sign-in.");
+      return;
+    }
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "id_token",
+      scope: "openid email profile",
+      nonce: crypto.randomUUID(),
+      prompt: "select_account",
+    });
+    window.location.assign(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  }
+
+  function signInWithLinkedIn() {
+    const clientId = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
+    if (!clientId) {
+      setError("Set VITE_LINKEDIN_CLIENT_ID before using LinkedIn sign-in.");
+      return;
+    }
+    const state = crypto.randomUUID();
+    localStorage.setItem("hire-power-linkedin-state", state);
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state,
+      scope: "openid profile email",
+    });
+    window.location.assign(`https://www.linkedin.com/oauth/v2/authorization?${params}`);
+  }
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card" aria-labelledby="auth-title">
+        <a className="brand auth-brand" href="#" onClick={(e) => e.preventDefault()}>
+          <span className="brand-icon">
+            <span className="logo-halo" aria-hidden="true" />
+            <Sparkles size={21} aria-hidden="true" />
+          </span>
+          <span className="brand-name">
+            Hire Power<span className="brand-dot">.</span>
+          </span>
+        </a>
+        <div>
+          <p className="eyebrow">SECURE WORKSPACE</p>
+          <h1 id="auth-title">
+            {mode === "login" ? "Sign in to keep tracking" : "Create your job search workspace"}
+          </h1>
+          <p>Use email and password, Google SSO, or LinkedIn SSO.</p>
+        </div>
+        {error && <div className="notice auth-error" role="alert">{error}</div>}
+        <form onSubmit={submit} className="auth-form">
+          {mode === "register" && (
+            <div className="form-row">
+              <label>
+                First name
+                <input name="first_name" autoComplete="given-name" maxLength={150} />
+              </label>
+              <label>
+                Last name
+                <input name="last_name" autoComplete="family-name" maxLength={150} />
+              </label>
+            </div>
+          )}
+          <label>
+            Email
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <label>
+            Password
+            <input
+              name="password"
+              type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              minLength={8}
+              required
+            />
+          </label>
+          <button className="primary" type="submit" disabled={busy}>
+            {busy ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+        <div className="auth-divider"><span>or continue with</span></div>
+        <div className="sso-actions">
+          <button className="secondary" type="button" onClick={signInWithGoogle}>Google</button>
+          <button className="secondary" type="button" onClick={signInWithLinkedIn}>LinkedIn</button>
+        </div>
+        <button className="text-button auth-switch" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function App({ auth, user, onLogout }) {
   const [tab, setTab] = useState("Jobs"),
     [query, setQuery] = useState(""),
     [mode, setMode] = useState("All locations"),
@@ -246,6 +508,36 @@ function App() {
     ]),
     [messages, setMessages, messageError] = useSaved("sprout-messages", []);
   const [resumeId, setResumeId] = useState(1);
+  const [remoteError, setRemoteError] = useState("");
+  const resumeImportInput = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadWorkspace() {
+      setRemoteError("");
+      try {
+        const [remoteApplications, remoteSavedJobs, remoteResumes, remoteMessages] =
+          await Promise.all([
+            apiRequest("/api/applications/", auth.access),
+            apiRequest("/api/saved-jobs/", auth.access),
+            apiRequest("/api/resumes/", auth.access),
+            apiRequest("/api/communications/", auth.access),
+          ]);
+        if (!active) return;
+        setApplications(remoteApplications);
+        setSaved(remoteSavedJobs.map((item) => item.jobId));
+        setResumes(remoteResumes);
+        setMessages(remoteMessages);
+        setResumeId(remoteResumes[0]?.id || 1);
+      } catch (error) {
+        if (active) setRemoteError(error.message);
+      }
+    }
+    loadWorkspace();
+    return () => {
+      active = false;
+    };
+  }, [auth.access]);
   const filtered = jobs.filter(
     (j) =>
       `${j.title} ${j.company} ${j.tags.join(" ")}`
@@ -268,12 +560,26 @@ function App() {
   function track(job) {
     setModal({ kind: "application", job });
   }
-  function submitApplication(e) {
+  async function submitApplication(e) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
-    setApplications([...applications, { ...data, id: Date.now() }]);
-    setModal(null);
-    setNotice("Application added to your tracker.");
+    const payload = {
+      ...data,
+      followUp: data.followUp || null,
+      sourceJobId: modal.job?.id || null,
+      jobPayload: modal.job || {},
+    };
+    try {
+      const created = await apiRequest("/api/applications/", auth.access, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setApplications([created, ...applications]);
+      setModal(null);
+      setNotice("Application added to your tracker.");
+    } catch (error) {
+      setNotice(`Could not save application: ${error.message}`);
+    }
   }
   function downloadResume() {
     const url = URL.createObjectURL(
@@ -284,6 +590,77 @@ function App() {
     a.download = `${activeResume.name}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+  async function toggleSavedJob(job) {
+    const isSaved = saved.includes(job.id);
+    const next = isSaved ? saved.filter((id) => id !== job.id) : [...saved, job.id];
+    setSaved(next);
+    try {
+      if (isSaved) {
+        await apiRequest(`/api/saved-jobs/by-job/${job.id}/`, auth.access, {
+          method: "DELETE",
+        });
+      } else {
+        await apiRequest("/api/saved-jobs/", auth.access, {
+          method: "POST",
+          body: JSON.stringify({ jobId: job.id, jobPayload: job }),
+        });
+      }
+    } catch (error) {
+      setSaved(saved);
+      setNotice(`Could not update saved jobs: ${error.message}`);
+    }
+  }
+  async function updateApplication(id, patch) {
+    const previous = applications;
+    setApplications(
+      applications.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+    try {
+      const updated = await apiRequest(`/api/applications/${id}/`, auth.access, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setApplications(previous.map((item) => (item.id === id ? updated : item)));
+    } catch (error) {
+      setApplications(previous);
+      setNotice(`Could not update application: ${error.message}`);
+    }
+  }
+  async function updateTextResume(id, patch) {
+    const previous = resumes;
+    setResumes(resumes.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    try {
+      const updated = await apiRequest(`/api/resumes/${id}/`, auth.access, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setResumes(previous.map((r) => (r.id === id ? updated : r)));
+    } catch (error) {
+      setResumes(previous);
+      setNotice(`Could not update resume: ${error.message}`);
+    }
+  }
+  async function importTextResume(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const imported = await importResumeFile(file);
+      const created = await apiRequest("/api/resumes/", auth.access, {
+        method: "POST",
+        body: JSON.stringify({
+          name: file.name.replace(/\.txt$/i, "") || "Imported resume",
+          content: imported.content,
+          master: false,
+        }),
+      });
+      setResumes([...resumes, created]);
+      setResumeId(created.id);
+      setNotice(imported.warnings.join(" "));
+    } catch (error) {
+      setNotice(`Could not import resume: ${error.message}`);
+    }
   }
   return (
     <div className="app">
@@ -342,8 +719,11 @@ function App() {
           </div>
         </figure>
         <div className="profile">
-          <div className="avatar">Y</div>
-          <div>My workspace</div>
+          <div className="avatar">{userInitial(user)}</div>
+          <div>
+            <strong>{user.name}</strong>
+            <small>{user.email}</small>
+          </div>
         </div>
       </aside>
       <div className="workspace">
@@ -355,6 +735,10 @@ function App() {
           </div>
           <div className="top-actions">
             <span className="demo-badge">Demo workspace</span>
+            <button className="text-button" onClick={onLogout}>
+              <LogOut size={16} />
+              Sign out
+            </button>
             <button
               className="icon-button"
               aria-label="View follow-up reminders"
@@ -363,7 +747,7 @@ function App() {
               <Bell size={20} />
               {upcoming.length > 0 && <i />}
             </button>
-            <div className="avatar small">Y</div>
+            <div className="avatar small">{userInitial(user)}</div>
           </div>
         </header>
         <main id="main">
@@ -393,6 +777,11 @@ function App() {
               </button>
             )}
           </div>
+          {remoteError && (
+            <div role="alert" className="notice">
+              Backend sync failed: {remoteError}. Local browser data is still available.
+            </div>
+          )}
           {(savedError || appsError || resumeError || messageError) && (
             <div role="alert" className="notice">
               Browser storage is unavailable. Your edits will last only for this
@@ -573,13 +962,7 @@ function App() {
                             className={`save-button ${saved.includes(job.id) ? "is-saved" : ""}`}
                             aria-label={`${saved.includes(job.id) ? "Unsave" : "Save"} ${job.title} at ${job.company}`}
                             aria-pressed={saved.includes(job.id)}
-                            onClick={() =>
-                              setSaved(
-                                saved.includes(job.id)
-                                  ? saved.filter((id) => id !== job.id)
-                                  : [...saved, job.id],
-                              )
-                            }
+                            onClick={() => toggleSavedJob(job)}
                           >
                             <Bookmark
                               size={19}
@@ -712,13 +1095,7 @@ function App() {
                             <select
                               value={a.status}
                               onChange={(e) =>
-                                setApplications(
-                                  applications.map((item) =>
-                                    item.id === a.id
-                                      ? { ...item, status: e.target.value }
-                                      : item,
-                                  ),
-                                )
+                                updateApplication(a.id, { status: e.target.value })
                               }
                             >
                               {stages.map((s) => (
@@ -732,13 +1109,9 @@ function App() {
                               type="date"
                               value={a.followUp}
                               onChange={(e) =>
-                                setApplications(
-                                  applications.map((item) =>
-                                    item.id === a.id
-                                      ? { ...item, followUp: e.target.value }
-                                      : item,
-                                  ),
-                                )
+                                updateApplication(a.id, {
+                                  followUp: e.target.value || null,
+                                })
                               }
                             />
                           </label>
@@ -775,10 +1148,27 @@ function App() {
           )}
           {tab === "Resumes" && (
             <div>
-              <ResumeUploads />
+              <ResumeUploads accessToken={auth.access} apiBaseUrl={API_BASE_URL} />
               <div className="resume-layout">
                 <section className="resume-list">
-                  <h2>Your resumes</h2>
+                  <div className="resume-list-heading">
+                    <h2>Your resumes</h2>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => resumeImportInput.current?.click()}
+                    >
+                      <Upload size={15} />
+                      Import .txt
+                    </button>
+                    <input
+                      ref={resumeImportInput}
+                      type="file"
+                      accept=".txt,text/plain"
+                      onChange={importTextResume}
+                      hidden
+                    />
+                  </div>
                   {resumes.map((r) => (
                     <button
                       key={r.id}
@@ -799,8 +1189,8 @@ function App() {
                     </button>
                   ))}
                   <p>
-                    Edits save automatically in this browser. Download a copy to
-                    keep it with you.
+                    Edits save to your account. Download a copy to keep it with
+                    you. {RESUME_IMPORT_LIMITATIONS}
                   </p>
                   <figure className="tab-meme resume-meme">
                     <img
@@ -825,13 +1215,7 @@ function App() {
                     id="resume-content"
                     value={activeResume.content}
                     onChange={(e) =>
-                      setResumes(
-                        resumes.map((r) =>
-                          r.id === activeResume.id
-                            ? { ...r, content: e.target.value }
-                            : r,
-                        ),
-                      )
+                      updateTextResume(activeResume.id, { content: e.target.value })
                     }
                   />
                   <span className="editor-caption">
@@ -1009,21 +1393,24 @@ function App() {
           )}
           {modal.kind === "resume" && (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 const name = new FormData(e.target).get("name");
-                const id = Date.now();
-                setResumes([
-                  ...resumes,
-                  {
-                    id,
-                    name,
-                    content: resumes.find((r) => r.master).content,
-                    master: false,
-                  },
-                ]);
-                setResumeId(id);
-                setModal(null);
+                try {
+                  const created = await apiRequest("/api/resumes/", auth.access, {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name,
+                      content: resumes.find((r) => r.master).content,
+                      master: false,
+                    }),
+                  });
+                  setResumes([...resumes, created]);
+                  setResumeId(created.id);
+                  setModal(null);
+                } catch (error) {
+                  setNotice(`Could not create resume: ${error.message}`);
+                }
               }}
             >
               <p>
@@ -1046,19 +1433,21 @@ function App() {
           )}
           {modal.kind === "message" && (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                setMessages([
-                  ...messages,
-                  {
-                    ...Object.fromEntries(new FormData(e.target)),
-                    id: Date.now(),
-                  },
-                ]);
-                setModal(null);
-                setNotice(
-                  "Communication logged. Update the application stage in Applications if needed.",
-                );
+                try {
+                  const created = await apiRequest("/api/communications/", auth.access, {
+                    method: "POST",
+                    body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+                  });
+                  setMessages([created, ...messages]);
+                  setModal(null);
+                  setNotice(
+                    "Communication logged. Update the application stage in Applications if needed.",
+                  );
+                } catch (error) {
+                  setNotice(`Could not save communication: ${error.message}`);
+                }
               }}
             >
               <label>
@@ -1167,4 +1556,4 @@ function Modal({ children, onClose }) {
     </dialog>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<AuthShell />);

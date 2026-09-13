@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Upload, Download, Trash2, FileText } from "lucide-react";
-import {
-  listResumeFiles,
-  storeResumeFile,
-  removeResumeFile,
-} from "./resumeFiles";
+import { MAX_RESUME_BYTES } from "./resumeFiles";
 import "./resumeUploads.css";
 
-export default function ResumeUploads() {
+function fileError(data) {
+  const message = data?.file?.[0] || data?.detail || "Could not save this resume. Please try again.";
+  return typeof message === "string" ? message : "Could not save this resume. Please try again.";
+}
+
+export default function ResumeUploads({ accessToken, apiBaseUrl }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,14 @@ export default function ResumeUploads() {
 
   useEffect(() => {
     let active = true;
-    listResumeFiles()
+    fetch(`${apiBaseUrl}/api/resume-documents/`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.detail || "Could not load uploaded resumes.");
+        return data;
+      })
       .then((records) => {
         if (active)
           setFiles(records.sort((a, b) => b.addedAt.localeCompare(a.addedAt)));
@@ -26,7 +34,7 @@ export default function ResumeUploads() {
       .catch(() => {
         if (active)
           setError(
-            "Could not load uploaded resumes. Browser storage may be unavailable; reload to try again.",
+            "Could not load uploaded resumes. Check the backend connection and reload to try again.",
           );
       })
       .finally(() => {
@@ -46,9 +54,21 @@ export default function ResumeUploads() {
     setError("");
     setStatus("");
     try {
-      const record = await storeResumeFile(file);
+      const extension = file.name.split(".").pop().toLowerCase();
+      if (!file.size) throw new Error("That file is empty. Choose another resume.");
+      if (!["pdf", "docx"].includes(extension)) throw new Error("Choose a PDF or DOCX file.");
+      if (file.size > MAX_RESUME_BYTES) throw new Error("That file is too large. The limit is 10 MB.");
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(`${apiBaseUrl}/api/resume-documents/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: form,
+      });
+      const record = await response.json();
+      if (!response.ok) throw new Error(fileError(record));
       setFiles((previous) => [record, ...previous]);
-      setStatus(`${file.name} saved in this browser.`);
+      setStatus(`${file.name} saved to your account.`);
     } catch (err) {
       setError(
         err.name === "QuotaExceededError"
@@ -61,18 +81,28 @@ export default function ResumeUploads() {
   }
 
   function download(file) {
-    const url = URL.createObjectURL(file.blob);
-    urls.current.add(url);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-      urls.current.delete(url);
-    }, 60000);
+    fetch(`${apiBaseUrl}/api/resume-documents/${file.id}/download/`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not download this file.");
+        return response.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        urls.current.add(url);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+          urls.current.delete(url);
+        }, 60000);
+      })
+      .catch((err) => setError(err.message));
   }
 
   async function remove(file) {
@@ -80,7 +110,11 @@ export default function ResumeUploads() {
     setError("");
     setStatus("");
     try {
-      await removeResumeFile(file.id);
+      const response = await fetch(`${apiBaseUrl}/api/resume-documents/${file.id}/`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) throw new Error("Could not remove this file.");
       setFiles((previous) => previous.filter((item) => item.id !== file.id));
       setStatus(`${file.name} removed.`);
     } catch {
@@ -117,7 +151,7 @@ export default function ResumeUploads() {
         />
       </div>
       <p>
-        PDF or DOCX, up to 10 MB. Original files are saved in this browser and
+        PDF or DOCX, up to 10 MB. Original files are saved to your account and
         can be downloaded again. Edit them in your document app; the text editor
         below stays separate.
       </p>

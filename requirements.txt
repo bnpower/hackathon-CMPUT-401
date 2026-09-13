@@ -1,11 +1,6 @@
-# Backend dependencies (Python 3.12 or 3.13 recommended).
-# Install: python -m pip install -r requirements.txt
-
-# Web framework and built-in admin.
-Django>=5.2,<5.3
-
-# REST API for the React.js frontend.
-djangorestframework>=3.16,<4.0
-
-# Allow the separately hosted frontend to call the backend.
-django-cors-headers>=4.9,<5.0
+# Backend dependencies now live in backend/pyproject.toml.
+# Install and run the API with uv:
+#   cd backend
+#   uv sync
+#   uv run python manage.py migrate
+#   uv run python manage.py runserver 127.0.0.1:8000
