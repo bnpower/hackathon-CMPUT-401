@@ -435,14 +435,6 @@ const jobs = [
 ];
 const initialApplications = [
     {
-        id: 101,
-        company: "The Lore Department",
-        position: "Aura Design Intern",
-        date: "2026-09-10",
-        status: "Interview",
-        followUp: "2026-09-16",
-    },
-    {
         id: 102,
         company: "Delulu Labs",
         position: "Frontend Vibe Engineer Intern",
@@ -898,6 +890,20 @@ function App({ auth, user, onLogout }) {
         } catch (error) {
             setApplications(previous);
             setNotice(`Could not update application: ${error.message}`);
+        }
+    }
+    async function deleteApplication(id) {
+        const target = applications.find((item) => item.id === id);
+        if (!target) return;
+        if (!window.confirm(`Delete the application for ${target.position} at ${target.company}? This cannot be undone.`)) return;
+        const previous = applications;
+        setApplications(applications.filter((item) => item.id !== id));
+        try {
+            await apiRequest(`/api/applications/${id}/`, auth.access, { method: "DELETE" });
+            setNotice("Application deleted.");
+        } catch (error) {
+            setApplications(previous);
+            setNotice(`Could not delete application: ${error.message}`);
         }
     }
     async function updateTextResume(id, patch) {
@@ -1434,6 +1440,7 @@ function App({ auth, user, onLogout }) {
                                             apps={applications.filter((a) => a.status === stage)}
                                             onStatusChange={(id, status) => updateApplication(id, { status })}
                                             onFollowUpChange={(id, followUp) => updateApplication(id, { followUp: followUp || null })}
+                                            onDelete={deleteApplication}
                                         />
                                     ))}
                                 </div>
@@ -2058,7 +2065,7 @@ function App({ auth, user, onLogout }) {
         </div>
     );
 }
-function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange }) {
+function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange, onDelete }) {
     const { setNodeRef, isOver } = useDroppable({ id: `col-${stage}` });
     return (
         <section className={`board-column ${isOver ? "is-drop-target" : ""}`} ref={setNodeRef}>
@@ -2069,7 +2076,7 @@ function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange }) {
             </h2>
             <SortableContext items={apps.map((a) => a.id)} strategy={verticalListSortingStrategy}>
                 {apps.map((a) => (
-                    <ApplicationCard key={a.id} application={a} onStatusChange={onStatusChange} onFollowUpChange={onFollowUpChange} />
+                    <ApplicationCard key={a.id} application={a} onStatusChange={onStatusChange} onFollowUpChange={onFollowUpChange} onDelete={onDelete} />
                 ))}
             </SortableContext>
             {!apps.length && <p className="column-empty">No applications here yet.</p>}
@@ -2078,7 +2085,7 @@ function BoardColumn({ stage, apps, onStatusChange, onFollowUpChange }) {
     );
 }
 
-function ApplicationCard({ application, onStatusChange, onFollowUpChange }) {
+function ApplicationCard({ application, onStatusChange, onFollowUpChange, onDelete }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: application.id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -2087,6 +2094,15 @@ function ApplicationCard({ application, onStatusChange, onFollowUpChange }) {
     };
     return (
         <article className="application-card" ref={setNodeRef} style={style}>
+            <button
+                type="button"
+                className="application-card-delete"
+                aria-label={`Delete application for ${application.position} at ${application.company}`}
+                title="Delete application"
+                onClick={() => onDelete(application.id)}
+            >
+                <Trash2 size={14} />
+            </button>
             <div
                 className="application-card-handle"
                 aria-label={`Drag to move ${application.position} at ${application.company}`}
